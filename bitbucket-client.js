@@ -102,49 +102,85 @@ export default class BitbucketClient {
       // Primeiro busca a PR para pegar os commits
       const pr = await this.getPullRequest(prNumber);
 
-      // Tenta buscar commits da PR
-      console.log(`🔍 Buscando commits da PR...`);
-      let commits = [];
-      try {
-        const commitsResponse = await axios.get(
-          `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/commits`,
-          this._getAxiosConfig()
-        );
-        commits = commitsResponse.data.values || [];
-        console.log(`✅ ${commits.length} commit(s) encontrado(s)`);
-      } catch (commitsError) {
-        console.warn(`⚠️  Não foi possível buscar commits: ${commitsError.message}`);
+      const sourceHash = pr.source?.commit?.hash;
+      const destHash = pr.destination?.commit?.hash;
+
+      // Busca diffstat comparando commits source e destination da PR
+      let diffstat = [];
+      console.log(`🔍 Buscando diffstat via comparação de commits...`);
+
+      if (sourceHash && destHash) {
+        try {
+          const allFiles = new Map();
+          let nextUrl = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/diffstat/${destHash}..${sourceHash}`;
+
+          while (nextUrl) {
+            const response = await axios.get(nextUrl, this._getAxiosConfig());
+            const values = response.data.values || [];
+            values.forEach(file => {
+              const path = file.new?.path || file.old?.path;
+              if (path && !allFiles.has(path)) {
+                allFiles.set(path, file);
+              }
+            });
+            nextUrl = response.data.next || null;
+          }
+
+          diffstat = Array.from(allFiles.values());
+          console.log(`✅ ${diffstat.length} arquivo(s) modificado(s) encontrado(s)`);
+        } catch (diffError) {
+          console.warn(`⚠️  Erro ao buscar diffstat por commits: ${diffError.response?.status} ${diffError.message}`);
+        }
       }
 
-      // Busca diffstat (estatísticas dos arquivos modificados)
-      let diffstat = [];
-      console.log(`🔍 Buscando diffstat...`);
-      try {
-        const response = await axios.get(
-          `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/diffstat`,
-          this._getAxiosConfig()
-        );
-        diffstat = response.data.values || [];
-        console.log(`✅ ${diffstat.length} arquivo(s) modificado(s) no diffstat`);
-      } catch (diffError) {
-        console.warn(`⚠️  Endpoint /diffstat não disponível: ${diffError.response?.status} ${diffError.message}`);
-
-        // Se diffstat não funcionar, tenta buscar cada commit
-        if (commits.length > 0) {
-          console.log(`🔍 Tentando buscar diff de cada commit...`);
+      // Fallback: tenta o endpoint de diffstat da PR
+      if (diffstat.length === 0) {
+        console.log(`🔍 Tentando endpoint /diffstat da PR...`);
+        try {
           const allFiles = new Map();
+          let nextUrl = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/diffstat`;
 
-          for (const commit of commits.slice(0, 10)) { // Limita a 10 commits
+          while (nextUrl) {
+            const response = await axios.get(nextUrl, this._getAxiosConfig());
+            const values = response.data.values || [];
+            values.forEach(file => {
+              const path = file.new?.path || file.old?.path;
+              if (path && !allFiles.has(path)) {
+                allFiles.set(path, file);
+              }
+            });
+            nextUrl = response.data.next || null;
+          }
+
+          diffstat = Array.from(allFiles.values());
+          console.log(`✅ ${diffstat.length} arquivo(s) modificado(s) no diffstat da PR`);
+        } catch (prDiffError) {
+          console.warn(`⚠️  Endpoint /diffstat da PR não disponível: ${prDiffError.response?.status} ${prDiffError.message}`);
+        }
+      }
+
+      // Último fallback: busca commits e diffstat por commit
+      if (diffstat.length === 0) {
+        console.log(`🔍 Buscando commits da PR como fallback...`);
+        try {
+          const commitsResponse = await axios.get(
+            `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/commits`,
+            this._getAxiosConfig()
+          );
+          const commits = commitsResponse.data.values || [];
+          console.log(`✅ ${commits.length} commit(s) encontrado(s)`);
+
+          const allFiles = new Map();
+          for (const commit of commits.slice(0, 10)) {
             try {
               const commitDiffResponse = await axios.get(
                 `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/diffstat/${commit.hash}`,
                 this._getAxiosConfig()
               );
-
               const commitFiles = commitDiffResponse.data.values || [];
               commitFiles.forEach(file => {
                 const path = file.new?.path || file.old?.path;
-                if (!allFiles.has(path)) {
+                if (path && !allFiles.has(path)) {
                   allFiles.set(path, file);
                 }
               });
@@ -155,9 +191,8 @@ export default class BitbucketClient {
 
           diffstat = Array.from(allFiles.values());
           console.log(`✅ ${diffstat.length} arquivo(s) únicos encontrados nos commits`);
-        } else {
-          console.warn(`❌ Não foi possível obter lista de arquivos modificados`);
-          return [];
+        } catch (commitsError) {
+          console.warn(`⚠️  Não foi possível buscar commits: ${commitsError.message}`);
         }
       }
 

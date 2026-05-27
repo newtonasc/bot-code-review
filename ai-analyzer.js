@@ -52,12 +52,22 @@ export default class AIAnalyzer {
       const response = await this.callLLM(prompt);
       return this.parseResponse(response);
     } catch (error) {
+      if (this._isQuotaError(error)) {
+        throw error;
+      }
       console.warn(`⚠️  Erro na análise com IA (${filePath}): ${error.message}`);
       if (error.response && error.response.data) {
         console.warn(`   Detalhes: ${JSON.stringify(error.response.data)}`);
       }
       return null;
     }
+  }
+
+  _isQuotaError(error) {
+    if (error.response?.status !== 429) return false;
+    const code = error.response?.data?.error?.code;
+    const type = error.response?.data?.error?.type;
+    return code === 'insufficient_quota' || type === 'insufficient_quota';
   }
 
   /**
@@ -75,15 +85,25 @@ export default class AIAnalyzer {
 
     const results = [];
     for (const file of files) {
-      const analysis = await this.analyzeFile(
-        file.filePath,
-        file.content,
-        file.patch,
-        file.staticIssues,
-        jiraContext
-      );
-      if (analysis) {
-        results.push({ filePath: file.filePath, analysis });
+      try {
+        const analysis = await this.analyzeFile(
+          file.filePath,
+          file.content,
+          file.patch,
+          file.staticIssues,
+          jiraContext
+        );
+        if (analysis) {
+          results.push({ filePath: file.filePath, analysis });
+        }
+      } catch (error) {
+        if (this._isQuotaError(error)) {
+          console.warn(`\n⚠️  Cota da IA excedida. Análise com IA desabilitada para esta execução.`);
+          console.warn(`   Verifique o plano e créditos do provider: ${this.provider}\n`);
+          this.enabled = false;
+          break;
+        }
+        console.warn(`⚠️  Erro na análise com IA (${file.filePath}): ${error.message}`);
       }
     }
 
@@ -109,6 +129,11 @@ export default class AIAnalyzer {
       const response = await this.callLLM(prompt);
       return this.parseSummaryResponse(response);
     } catch (error) {
+      if (this._isQuotaError(error)) {
+        console.warn(`\n⚠️  Cota da IA excedida. Resumo da PR ignorado.\n`);
+        this.enabled = false;
+        return null;
+      }
       console.warn(`⚠️  Erro ao gerar resumo com IA: ${error.message}`);
       if (error.response && error.response.data) {
         console.warn(`   Detalhes: ${JSON.stringify(error.response.data)}`);

@@ -41,6 +41,7 @@ export default class CodeAnalyzer {
    */
   applyRule(rule, filePath, content, patch) {
     if (rule.pattern) {
+      if (!content) return;
       // Regra baseada em regex
       const matches = content.match(new RegExp(rule.pattern, 'g'));
       if (matches) {
@@ -54,6 +55,7 @@ export default class CodeAnalyzer {
         });
       }
     } else if (rule.check) {
+      if (!content) return;
       // Regra baseada em função de verificação
       const result = rule.check(content, filePath);
 
