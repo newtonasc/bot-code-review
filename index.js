@@ -42,7 +42,10 @@ class CodeReviewBot {
     this.jira = new JiraClient(
       jiraConfig.cloudId,
       jiraConfig.projectKey,
-      jiraConfig.mcpEnabled || false
+      jiraConfig.mcpEnabled || false,
+      jiraConfig.apiToken,
+      jiraConfig.email,
+      jiraConfig.siteUrl,
     );
     this.jiraSiteUrl = jiraConfig.siteUrl || null;
     this.ai = new AIAnalyzer(
@@ -91,25 +94,18 @@ class CodeReviewBot {
       if (jiraKey) {
         console.log(`✅ Issue do Jira detectada: ${jiraKey}\n`);
 
-        // Tenta buscar via MCP se habilitado
-        if (this.jira.mcpEnabled && !jiraIssue) {
-          console.log(`🔍 Buscando dados da issue via MCP da Atlassian...\n`);
-          jiraAnalysis = await this.jira.fetchAndAnalyzeIssue(jiraKey);
-
-          if (jiraAnalysis && jiraAnalysis.found) {
-            console.log(this.jira.formatIssueInfo(jiraAnalysis));
-          }
-        }
-        // Se tiver dados da issue do Jira (passados manualmente), analisa
-        else if (jiraIssue) {
+        if (jiraIssue) {
+          // Dados passados manualmente via options
           jiraAnalysis = this.jira.analyzeJiraIssue(jiraIssue);
           console.log(`✅ Dados da issue carregados\n`);
-        }
-        // Modo sem dados da issue
-        else {
-          console.log(`ℹ️  Para análise completa, forneça os dados da issue do Jira via --jira-issue-data\n`);
-          console.log(`   Ou use o MCP da Atlassian para buscar automaticamente.\n`);
-          console.log(`💡 Exemplo com MCP: Execute este bot via Claude/Cursor com MCP habilitado\n`);
+        } else {
+          // Busca automática via API REST ou MCP
+          jiraAnalysis = await this.jira.fetchAndAnalyzeIssue(jiraKey);
+          if (jiraAnalysis && jiraAnalysis.found) {
+            console.log(this.jira.formatIssueInfo(jiraAnalysis));
+          } else if (!this.jira.apiEnabled && !this.jira.mcpEnabled) {
+            console.log(`ℹ️  Configure JIRA_SITE_URL (ou JIRA_CLOUD_ID) no .env para busca automática de issues.\n`);
+          }
         }
       }
 
@@ -506,10 +502,13 @@ Documentação completa: README.md
   const username = process.env.BITBUCKET_USERNAME || null; // Opcional, necessário para tokens Atlassian (ATATT*)
 
   // Configuração do Jira (opcional)
+  // JIRA_TOKEN e JIRA_USERNAME podem ser omitidos se forem iguais ao Bitbucket
   const jiraConfig = {
     cloudId: process.env.JIRA_CLOUD_ID || null,
     projectKey: process.env.JIRA_PROJECT_KEY || null,
     siteUrl: process.env.JIRA_SITE_URL || null,
+    apiToken: process.env.JIRA_TOKEN || process.env.BITBUCKET_TOKEN || null,
+    email: process.env.JIRA_USERNAME || process.env.BITBUCKET_USERNAME || null,
   };
 
   // Configuração de IA (opcional)

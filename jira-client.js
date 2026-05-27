@@ -3,11 +3,78 @@
  * Fornece interface para buscar e validar issues do Jira
  */
 
+import axios from 'axios';
+
 export default class JiraClient {
-  constructor(cloudId = null, projectKey = null, mcpEnabled = false) {
+  constructor(cloudId = null, projectKey = null, mcpEnabled = false, apiToken = null, email = null, siteUrl = null) {
     this.cloudId = cloudId;
     this.projectKey = projectKey;
     this.mcpEnabled = mcpEnabled;
+    this.apiToken = apiToken;
+    this.email = email;
+    this.siteUrl = siteUrl;
+    this.apiEnabled = !!(apiToken && email && (siteUrl || cloudId));
+  }
+
+  /**
+   * Busca issue do Jira via API REST do Jira Cloud
+   * Usa Basic Auth com email + Atlassian API Token
+   * @param {string} issueKey - Chave da issue (ex: PROJ-123)
+   * @returns {Object|null} Dados da issue ou null
+   */
+  async fetchIssueViaAPI(issueKey) {
+    if (!this.apiEnabled) return null;
+
+    const rawSite = this.siteUrl ? this.siteUrl.replace(/\/$/, '') : null;
+    const site = rawSite ? (rawSite.startsWith('http') ? rawSite : `https://${rawSite}`) : null;
+    const base = site
+      ? `${site}/rest/api/3`
+      : `https://api.atlassian.com/ex/jira/${this.cloudId}/rest/api/3`;
+
+    try {
+      const response = await axios.get(`${base}/issue/${issueKey}`, {
+        auth: { username: this.email, password: this.apiToken },
+        headers: { Accept: 'application/json' },
+        timeout: 15000,
+      });
+      return response.data;
+    } catch (error) {
+      const status = error.response?.status;
+      if (status === 401 || status === 403) {
+        console.warn(`⚠️  Sem acesso à API do Jira (${status}). O token Bitbucket não tem escopo Jira.`);
+        console.warn(`   Crie um Atlassian API Token em: https://id.atlassian.com/manage-profile/security/api-tokens`);
+        console.warn(`   E configure JIRA_TOKEN=<token> no .env\n`);
+        this.apiEnabled = false;
+      } else if (status === 404) {
+        console.warn(`⚠️  Issue ${issueKey} não encontrada no Jira.`);
+        console.warn(`   Possível causa: o token Bitbucket não tem acesso ao Jira.`);
+        console.warn(`   Para habilitar: crie um token em https://id.atlassian.com/manage-profile/security/api-tokens`);
+        console.warn(`   e adicione JIRA_TOKEN=<token> no .env\n`);
+      } else {
+        console.warn(`⚠️  Erro ao buscar ${issueKey} via API Jira: ${status || ''} ${error.message}`);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Extrai texto plano de uma descrição Jira (ADF ou string)
+   * @param {Object|string} description - Descrição em ADF ou texto
+   * @returns {string}
+   */
+  _extractText(description) {
+    if (!description) return '';
+    if (typeof description === 'string') return description;
+
+    const extract = (node) => {
+      if (!node) return '';
+      let text = node.text || '';
+      if (node.content) text += node.content.map(extract).join('');
+      if (['paragraph', 'heading', 'listItem', 'bulletList', 'orderedList'].includes(node.type)) text += '\n';
+      return text;
+    };
+
+    return extract(description);
   }
 
   /**
@@ -47,22 +114,26 @@ export default class JiraClient {
   }
 
   /**
-   * Busca issue via MCP e analisa (modo assistido)
+   * Busca issue e analisa — tenta API REST primeiro, depois MCP
    * @param {string} issueKey - Chave da issue
-   * @returns {Object|null} Análise da issue
+   * @returns {Object} Análise da issue
    */
   async fetchAndAnalyzeIssue(issueKey) {
-    const jiraIssue = await this.fetchIssueViaMCP(issueKey);
-
-    if (!jiraIssue) {
-      return {
-        found: false,
-        key: issueKey,
-        message: 'Issue não encontrada via MCP. Use modo manual.',
-      };
+    if (this.apiEnabled) {
+      console.log(`🔍 Buscando ${issueKey} via API do Jira...`);
+      const issue = await this.fetchIssueViaAPI(issueKey);
+      if (issue) {
+        console.log(`✅ Issue ${issueKey} carregada\n`);
+        return this.analyzeJiraIssue(issue);
+      }
     }
 
-    return this.analyzeJiraIssue(jiraIssue);
+    if (this.mcpEnabled) {
+      const issue = await this.fetchIssueViaMCP(issueKey);
+      if (issue) return this.analyzeJiraIssue(issue);
+    }
+
+    return { found: false, key: issueKey };
   }
 
   /**
@@ -118,9 +189,10 @@ export default class JiraClient {
     const bodyKey = this.extractJiraKey(pr.body || '');
     if (bodyKey) return bodyKey;
 
-    // Busca no branch
-    if (pr.head && pr.head.ref) {
-      const branchKey = this.extractJiraKey(pr.head.ref);
+    // Busca no branch (Bitbucket: pr.source.branch.name, GitHub: pr.head.ref)
+    const branchName = pr.source?.branch?.name || pr.head?.ref || null;
+    if (branchName) {
+      const branchKey = this.extractJiraKey(branchName);
       if (branchKey) return branchKey;
     }
 
@@ -147,7 +219,7 @@ export default class JiraClient {
       status: jiraIssue.fields?.status?.name || 'Unknown',
       priority: jiraIssue.fields?.priority?.name || 'Unknown',
       summary: jiraIssue.fields?.summary || '',
-      description: jiraIssue.fields?.description || '',
+      description: this._extractText(jiraIssue.fields?.description) || '',
       assignee: jiraIssue.fields?.assignee?.displayName || 'Unassigned',
       reporter: jiraIssue.fields?.reporter?.displayName || 'Unknown',
       labels: jiraIssue.fields?.labels || [],
