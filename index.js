@@ -23,8 +23,8 @@ const __dirname = dirname(__filename);
 
 const envPath = process.env.CODE_REVIEW_ENV_FILE
   ? (process.env.CODE_REVIEW_ENV_FILE.startsWith('/')
-      ? process.env.CODE_REVIEW_ENV_FILE
-      : join(process.cwd(), process.env.CODE_REVIEW_ENV_FILE))
+    ? process.env.CODE_REVIEW_ENV_FILE
+    : join(process.cwd(), process.env.CODE_REVIEW_ENV_FILE))
   : join(__dirname, '.env');
 dotenv.config({ path: envPath });
 
