@@ -1,0 +1,141 @@
+# Exemplo de GitHub Actions Workflow para Code Review Bot
+# Este arquivo pode ser adicionado em .github/workflows/code-review-bot.yml
+
+name: Automated Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    
+    # Permissões necessárias para criar reviews
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+        with:
+          # Necessário para acessar todos os arquivos
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+      
+      - name: Instalar dependências do bot
+        run: |
+          cd scripts/code-review-bot
+          npm ci
+      
+      - name: Executar Code Review Bot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO: ${{ github.event.repository.name }}
+        run: |
+          cd scripts/code-review-bot
+          # Executa em modo dry-run para não criar review duplicado
+          # Comentários serão adicionados como comentários da Action
+          node index.js ${{ github.event.pull_request.number }} --dry-run > review-output.txt 2>&1
+          
+          # Captura código de saída
+          EXIT_CODE=$?
+          
+          # Exibe resultado
+          cat review-output.txt
+          
+          exit $EXIT_CODE
+      
+      - name: Comentar resultado (se houver issues)
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('scripts/code-review-bot/review-output.txt', 'utf8');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## 🤖 Code Review Automatizado\n\n\`\`\`\n${output}\n\`\`\``
+            });
+      
+      - name: Adicionar label (se houver erros)
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['needs-changes', 'code-review-bot']
+            });
+      
+      - name: Remover label (se passar)
+        if: success()
+        uses: actions/github-script@v6
+        continue-on-error: true
+        with:
+          script: |
+            await github.rest.issues.removeLabel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              name: 'needs-changes'
+            });
+
+# Workflow alternativo: executar apenas quando solicitado
+# name: Manual Code Review
+# 
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       pr_number:
+#         description: 'Número da Pull Request'
+#         required: true
+#         type: number
+#       review_type:
+#         description: 'Tipo de review'
+#         required: false
+#         default: 'COMMENT'
+#         type: choice
+#         options:
+#           - COMMENT
+#           - REQUEST_CHANGES
+#           - APPROVE
+# 
+# jobs:
+#   manual-review:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
+#       pull-requests: write
+#     
+#     steps:
+#       - uses: actions/checkout@v3
+#       
+#       - uses: actions/setup-node@v3
+#         with:
+#           node-version: '22'
+#       
+#       - name: Instalar dependências
+#         run: |
+#           cd scripts/code-review-bot
+#           npm ci
+#       
+#       - name: Executar Review
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#         run: |
+#           cd scripts/code-review-bot
+#           # Executa de forma não-interativa
+#           node index.js ${{ inputs.pr_number }}

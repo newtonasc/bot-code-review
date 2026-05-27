@@ -1,0 +1,68 @@
+{
+  "name": "code-review-bot-config",
+  "version": "1.0.0",
+  "description": "Configuração do Code Review Bot",
+  "rules": {
+    "enabled": {
+      "imports": true,
+      "formatting": true,
+      "controllers": true,
+      "services": true,
+      "repositories": true,
+      "permissions": true,
+      "errors": true,
+      "models": true,
+      "typescript": true,
+      "constants": true,
+      "tests": true
+    },
+    "severityOverrides": {
+      "format-01": "warning",
+      "constants-01": "info"
+    }
+  },
+  "files": {
+    "ignore": [
+      "swagger_output.json",
+      "package.json",
+      "package-lock.json",
+      "yarn.lock",
+      ".eslintrc",
+      ".babelrc",
+      "node_modules/",
+      "coverage/",
+      "logs/",
+      ".git/",
+      "__mocks__/",
+      "keyfile.",
+      ".yaml",
+      ".yml",
+      ".md",
+      ".sh"
+    ],
+    "maxFileSize": 1000000
+  },
+  "github": {
+    "defaultReviewType": "REQUEST_CHANGES",
+    "maxCommentsPerReview": 50,
+    "includeComplianceCheck": true,
+    "includeIssueLinking": true
+  },
+  "output": {
+    "verbosity": "normal",
+    "colorOutput": true,
+    "includeLineNumbers": true,
+    "includeCodeSnippets": false
+  },
+  "analysis": {
+    "maxIssuesPerFile": 20,
+    "stopOnFirstError": false,
+    "parallelAnalysis": false
+  },
+  "customMessages": {
+    "reviewHeader": "## 🤖 Code Review Automatizado\n\n**Análise baseada nos padrões configurados do projeto**",
+    "noIssuesFound": "✅ Nenhuma issue encontrada! Código está seguindo os padrões.",
+    "errorSummary": "🚨 **{count}** erro(s) crítico(s) encontrado(s)",
+    "warningSummary": "⚠️ **{count}** aviso(s) encontrado(s)"
+  }
+}

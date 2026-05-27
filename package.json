@@ -1,0 +1,43 @@
+{
+  "name": "@newtonasc/code-review-bot",
+  "version": "1.6.0",
+  "description": "Bot de code review automatizado para Pull Requests do Bitbucket com integração ao Jira, MCP da Atlassian e análise com IA (Claude/GPT) - Projeto independente e reutilizável",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "code-review": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "review": "node index.js",
+    "help": "node index.js --help",
+    "example:jira": "node jira-integration-example.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "dotenv": "^17.4.2"
+  },
+  "keywords": [
+    "code-review",
+    "bitbucket",
+    "github",
+    "jira",
+    "atlassian",
+    "pull-request",
+    "automation",
+    "ai",
+    "claude",
+    "gpt",
+    "static-analysis"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/newtonasc/bot-code-review"
+  },
+  "author": "newtonasc",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
