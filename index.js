@@ -469,7 +469,8 @@ Variáveis de Ambiente:
   BITBUCKET_USERNAME       Email do usuário (obrigatório para Atlassian API Tokens)
   JIRA_CLOUD_ID            Cloud ID do Jira (opcional, para links da issue)
   JIRA_PROJECT_KEY         Chave do projeto no Jira (opcional, ex: B2B, PROJ)
-  AI_PROVIDER              Provider de IA: 'claude' ou 'openai' (opcional)
+  JIRA_TOKEN               Atlassian API Token para Jira (opcional, se diferente do BITBUCKET_TOKEN)
+  AI_PROVIDER              Provider de IA: 'claude', 'openai' ou 'github-models' (opcional)
   AI_API_KEY               API Key do provider de IA (opcional, habilita análise com IA)
 
 Exemplos:

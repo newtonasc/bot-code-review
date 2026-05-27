@@ -43,22 +43,29 @@ Regras Estáticas (precisão) + IA (inteligência) = Code Review Completo
 - Boa alternativa
 - API Key: https://platform.openai.com/api-keys
 
+**GitHub Models** - Alternativa com infraestrutura Azure
+- Modelo: `gpt-4o` (e outros disponíveis)
+- Usa infraestrutura Azure via GitHub
+- API Key: GitHub Personal Access Token com acesso a Models
+- Configuração: https://github.com/marketplace/models
+
 ### 2. Configure Variáveis de Ambiente
 
 Edite `.env`:
 
 ```bash
 # ===== Configuração de IA =====
-AI_PROVIDER=claude          # ou 'openai'
+AI_PROVIDER=claude          # ou 'openai' ou 'github-models'
 AI_API_KEY=sk-ant-...      # Sua API key
 ```
 
 **Custos Estimados (por PR típica com 5 arquivos):**
 
-| Provider | Custo/PR | Custo/mês (50 PRs) |
-|----------|----------|-------------------|
-| Claude   | ~$0.10   | ~$5.00            |
-| OpenAI   | ~$0.15   | ~$7.50            |
+| Provider | Custo/PR | Custo/mês (50 PRs) | Notas |
+|----------|----------|-------------------|-------|
+| Claude   | ~$0.10   | ~$5.00            | Melhor para análise de código |
+| OpenAI   | ~$0.15   | ~$7.50            | Boa alternativa |
+| GitHub Models | Variável | Depende do plano | Pode ter tier gratuito |
 
 ### 3. Execute o Bot
 

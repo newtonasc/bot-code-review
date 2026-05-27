@@ -30,6 +30,14 @@ export default class AIAnalyzer {
           'content-type': 'application/json',
         },
       },
+      'github-models': {
+        baseURL: 'https://models.inference.ai.azure.com/chat/completions',
+        model: 'gpt-4o',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'content-type': 'application/json',
+        },
+      },
     };
   }
 
@@ -281,7 +289,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
   async callLLM(prompt) {
     const cfg = this.config[this.provider];
     if (!cfg) {
-      throw new Error(`Provider não suportado: ${this.provider}`);
+      throw new Error(`Provider não suportado: ${this.provider}. Use 'claude', 'openai' ou 'github-models'.`);
     }
 
     let requestBody;
@@ -294,7 +302,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
           { role: 'user', content: prompt },
         ],
       };
-    } else if (this.provider === 'openai') {
+    } else if (this.provider === 'openai' || this.provider === 'github-models') {
       requestBody = {
         model: cfg.model,
         messages: [
@@ -313,7 +321,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
     // Extrai conteúdo da resposta
     if (this.provider === 'claude') {
       return response.data.content[0].text;
-    } else if (this.provider === 'openai') {
+    } else if (this.provider === 'openai' || this.provider === 'github-models') {
       return response.data.choices[0].message.content;
     }
   }
