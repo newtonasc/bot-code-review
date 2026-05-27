@@ -10,7 +10,8 @@ async function testJiraConnection() {
   const email = process.env.JIRA_USERNAME || process.env.BITBUCKET_USERNAME;
   const siteUrl = process.env.JIRA_SITE_URL;
   const cloudId = process.env.JIRA_CLOUD_ID;
-  const issueKey = 'NOVA-5187';
+  const projectKey = process.env.JIRA_PROJECT_KEY || 'PROJ';
+  const issueKey = `${projectKey}-1`; // Teste com a primeira issue do projeto
 
   console.log('🔍 Testando conexão com o Jira...\n');
   console.log(`📧 Email: ${email}`);
@@ -99,8 +100,8 @@ async function testJiraConnection() {
   console.log('   • Adicione o token no .env como JIRA_TOKEN=<token>\n');
 
   console.log('2️⃣  Se o teste "Myself" funcionou mas a issue não:');
-  console.log('   • Verifique se você tem acesso ao projeto NOVA no Jira');
-  console.log('   • Tente acessar: https://autoavaliar.atlassian.net/browse/NOVA-5187\n');
+  console.log(`   • Verifique se você tem acesso ao projeto ${projectKey} no Jira`);
+  console.log(`   • Tente acessar: https://${siteUrl}/browse/${issueKey}\n`);
 
   console.log('3️⃣  Se a issue foi encontrada:');
   console.log('   • Parabéns! A integração está funcionando! 🎉\n');

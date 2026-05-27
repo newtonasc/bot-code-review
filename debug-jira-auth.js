@@ -103,9 +103,11 @@ async function debugAuth() {
     }
   }
 
-  // Teste 3: Tentar acessar a issue
-  console.log('🎫 Teste 3: Tentando acessar a issue NOVA-5187...');
-  const issueUrl = `${baseUrl}/rest/api/3/issue/NOVA-5187`;
+  // Teste 3: Tentar acessar uma issue
+  const projectKey = process.env.JIRA_PROJECT_KEY || 'PROJ';
+  const testIssue = `${projectKey}-1`;
+  console.log(`🎫 Teste 3: Tentando acessar a issue ${testIssue}...`);
+  const issueUrl = `${baseUrl}/rest/api/3/issue/${testIssue}`;
 
   try {
     const credentials = Buffer.from(`${email}:${token}`).toString('base64');
@@ -131,11 +133,11 @@ async function debugAuth() {
     if (status === 404) {
       console.log(`⚠️  Issue não encontrada (404)`);
       console.log(`   Isso pode significar:`);
-      console.log(`   1. A issue NOVA-5187 não existe`);
+      console.log(`   1. A issue ${testIssue} não existe`);
       console.log(`   2. Você não tem permissão para ver essa issue`);
-      console.log(`   3. O projeto NOVA não está acessível com esse token\n`);
+      console.log(`   3. O projeto ${projectKey} não está acessível com esse token\n`);
       console.log(`💡 Verifique:`);
-      console.log(`   • Acesse: https://autoavaliar.atlassian.net/browse/NOVA-5187`);
+      console.log(`   • Acesse: https://${siteUrl}/browse/${testIssue}`);
       console.log(`   • Confirme que você consegue ver a issue no navegador`);
       console.log(`   • Verifique se está logado com o email: ${email}\n`);
     } else {
