@@ -358,7 +358,7 @@ export default class BitbucketClient {
           content: { raw: content },
           inline: {
             path,
-            to: line,
+            to: parseInt(line, 10),
           },
         },
         this._getAxiosConfig()
@@ -366,7 +366,10 @@ export default class BitbucketClient {
 
       return response.data;
     } catch (error) {
-      throw new Error(`Erro ao adicionar comentário inline: ${error.message}`);
+      // Preserva o status HTTP para o chamador poder identificar 400 vs outros erros
+      const err = new Error(`Erro ao adicionar comentário inline: ${error.message}`);
+      err.response = error.response;
+      throw err;
     }
   }
 
@@ -514,6 +517,7 @@ export default class BitbucketClient {
         mainComment: null,
         inlineComments: [],
         approval: null,
+        html_url: `https://bitbucket.org/${this.workspace}/${this.repoSlug}/pull-requests/${prNumber}`,
       };
 
       // Adiciona comentário principal
@@ -521,7 +525,7 @@ export default class BitbucketClient {
         result.mainComment = await this.addComment(prNumber, body);
       }
 
-      // Adiciona comentários inline
+      // Adiciona comentários inline, com fallback para comentário geral se a linha for inválida
       for (const comment of comments) {
         try {
           const inlineComment = await this.addInlineComment(
@@ -532,7 +536,18 @@ export default class BitbucketClient {
           );
           result.inlineComments.push(inlineComment);
         } catch (err) {
-          console.warn(`Erro ao adicionar comentário inline: ${err.message}`);
+          // 400 indica linha/path fora do diff — posta como comentário geral com contexto
+          if (err.response?.status === 400 || err.message.includes('400')) {
+            try {
+              const fallbackBody = `**${comment.path}** (linha ${comment.line}):\n\n${comment.body}`;
+              const fallback = await this.addComment(prNumber, fallbackBody);
+              result.inlineComments.push(fallback);
+            } catch (fallbackErr) {
+              console.warn(`⚠️  Não foi possível adicionar comentário em ${comment.path}:${comment.line}`);
+            }
+          } else {
+            console.warn(`⚠️  Erro ao adicionar comentário inline em ${comment.path}:${comment.line}: ${err.message}`);
+          }
         }
       }
 
