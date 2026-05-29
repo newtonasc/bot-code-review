@@ -43,14 +43,13 @@ const RISK_ORDER = { low: 0, medium: 1, high: 2 };
 
 function isRiskWithinThreshold(riskLevel, maxRisk) {
   const level = RISK_ORDER[riskLevel?.toLowerCase()] ?? Infinity;
-  const max   = RISK_ORDER[maxRisk?.toLowerCase()] ?? -1;
+  const max = RISK_ORDER[maxRisk?.toLowerCase()] ?? -1;
   return level <= max;
 }
 
 class CodeReviewBot {
   constructor(token, workspace, repoSlug, username = null, jiraConfig = {}, aiConfig = {}) {
     this.bitbucket = new BitbucketClient(token, workspace, repoSlug, username);
-    this.analyzer = new CodeAnalyzer();
     this.cli = new InteractiveCLI();
     this.projectContext = new ProjectContextCollector(this.bitbucket);
     this.jira = new JiraClient(
@@ -157,22 +156,25 @@ class CodeReviewBot {
       const files = await this.bitbucket.getPullRequestFiles(prNumber);
       console.log(`✅ ${files.length} arquivo(s) modificado(s)\n`);
 
-      // Analisa arquivos
+      // Coleta contexto semântico do repositório (documentação, constantes, configuração)
+      // Necessário tanto para IA quanto para análise estática de enums
+      const commitHash = pr.source?.commit?.hash;
+      let projectContextData = null;
+      if (commitHash) {
+        projectContextData = await this.projectContext.collect(commitHash);
+      }
+
+      // Analisa arquivos com contexto do projeto
       this.cli.displayProgress('Analisando código');
-      const issuesByFile = this.analyzer.analyzeFiles(files);
-      const report = this.analyzer.generateReport(issuesByFile);
+      const analyzer = new CodeAnalyzer(projectContextData);
+      const issuesByFile = analyzer.analyzeFiles(files);
+      const report = analyzer.generateReport(issuesByFile);
       console.log('✅ Análise concluída\n');
 
       // Análise com IA (se habilitada)
       let aiAnalyses = [];
       let aiSummary = null;
       if (this.ai.enabled) {
-        // Coleta contexto semântico do repositório (documentação, constantes, configuração)
-        const commitHash = pr.source?.commit?.hash;
-        if (commitHash) {
-          await this.projectContext.collect(commitHash);
-        }
-
         // Prepara dados para IA
         const filesForAI = files.map(f => ({
           filePath: f.filename,
@@ -210,7 +212,7 @@ class CodeReviewBot {
         this.cli.displayCompliance(compliance);
       } else if (issue) {
         // Fallback para issue do GitHub
-        compliance = this.analyzer.analyzeIssueCompliance(issue, files);
+        compliance = analyzer.analyzeIssueCompliance(issue, files);
         this.cli.displayCompliance(compliance);
       }
 
@@ -221,7 +223,7 @@ class CodeReviewBot {
       }
 
       // Formata comentários para Bitbucket
-      let comments = this.analyzer.formatForBitbucket(issuesByFile);
+      let comments = analyzer.formatForBitbucket(issuesByFile);
 
       // Adiciona comentários da IA (se houver)
       if (aiAnalyses.length > 0) {
@@ -603,9 +605,9 @@ Documentação completa: README.md
   }
 
   // Configuração de automação de review
-  const autoApprove         = process.env.AUTO_APPROVE_ENABLED === 'true';
-  const autoApproveMaxRisk  = (process.env.AUTO_APPROVE_MAX_RISK || 'low').toLowerCase();
-  const autoRequestChanges  = process.env.AUTO_REQUEST_CHANGES_ENABLED === 'true';
+  const autoApprove = process.env.AUTO_APPROVE_ENABLED === 'true';
+  const autoApproveMaxRisk = (process.env.AUTO_APPROVE_MAX_RISK || 'low').toLowerCase();
+  const autoRequestChanges = process.env.AUTO_REQUEST_CHANGES_ENABLED === 'true';
 
   if (autoApprove) {
     console.log(`🤖 Auto-aprovação habilitada (risco máximo: "${autoApproveMaxRisk}")\n`);

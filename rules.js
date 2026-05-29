@@ -335,18 +335,82 @@ const rules = {
     {
       id: 'constants-01',
       severity: 'warning',
-      check: (content) => {
-        // Verifica hardcoded de valores que deveriam estar em Constants ou enumerators
-        const magicNumbers = content.match(/===\s*\d+\s*[^\.]/g);
-        const magicStrings = content.match(/===\s*['"][^'"]+['"]/g);
+      check: (content, filePath, enumMatcher) => {
+        const issues = [];
 
-        if (magicNumbers || magicStrings) {
-          return {
-            message: 'NÃO hardcode valores. Use Constants, enumerators ou i18n.',
+        // Detecta números hardcoded (exceto 0, 1 em contextos específicos)
+        // Padrão: === numero ou == numero ou !== numero ou != numero
+        const numberPattern = /[!=]==?\s*(-?\d+)(?![.\w])/g;
+        let match;
+
+        while ((match = numberPattern.exec(content)) !== null) {
+          const value = parseInt(match[1], 10);
+
+          // Ignora valores comuns que geralmente não são enums
+          if (value === 0 || value === 1 || value === -1) {
+            continue;
+          }
+
+          // Se temos enumMatcher, busca sugestões específicas
+          if (enumMatcher && enumMatcher.hasEnums()) {
+            const matches = enumMatcher.findMatchingEnums(value);
+
+            if (matches.length > 0) {
+              const suggestion = enumMatcher.generateSuggestion(value, matches);
+              issues.push({
+                message: suggestion.message,
+                suggestion: suggestion.suggestion,
+              });
+              continue;
+            }
+          }
+
+          // Fallback: mensagem genérica se não encontrou enum
+          issues.push({
+            message: `Evite números mágicos (${value}). Use Constants ou enumerators.`,
             suggestion: 'Verifique src/enumerators/ e src/utilities/constants.js para constantes existentes.',
-          };
+          });
         }
-        return null;
+
+        // Detecta strings hardcoded em comparações
+        // Padrão: === 'string' ou == "string" ou !== 'string' ou != "string"
+        const stringPattern = /[!=]==?\s*(['"])([^'"]+)\1/g;
+
+        while ((match = stringPattern.exec(content)) !== null) {
+          const value = match[2];
+
+          // Ignora strings vazias e muito curtas (provavelmente não são enums)
+          if (!value || value.length < 2) {
+            continue;
+          }
+
+          // Ignora strings que parecem ser texto para usuário (com espaços, pontuação, etc.)
+          if (/[\s.,!?;:]/.test(value)) {
+            continue;
+          }
+
+          // Se temos enumMatcher, busca sugestões específicas
+          if (enumMatcher && enumMatcher.hasEnums()) {
+            const matches = enumMatcher.findMatchingEnums(value);
+
+            if (matches.length > 0) {
+              const suggestion = enumMatcher.generateSuggestion(value, matches);
+              issues.push({
+                message: suggestion.message,
+                suggestion: suggestion.suggestion,
+              });
+              continue;
+            }
+          }
+
+          // Fallback: mensagem genérica se não encontrou enum
+          issues.push({
+            message: `Evite strings hardcoded ('${value}'). Use Constants, enumerators ou i18n.`,
+            suggestion: 'Verifique src/enumerators/ e src/utilities/constants.js para constantes existentes.',
+          });
+        }
+
+        return issues.length > 0 ? issues : null;
       },
     },
   ],

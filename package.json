@@ -1,6 +1,6 @@
 {
   "name": "@newtonasc/code-review-bot",
-  "version": "1.8.3",
+  "version": "1.9.0",
   "description": "Bot de code review automatizado para Pull Requests do Bitbucket com integração ao Jira, MCP da Atlassian e análise com IA (Claude/GPT) - Projeto independente e reutilizável",
   "type": "module",
   "main": "index.js",

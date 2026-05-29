@@ -23,6 +23,7 @@ Bot automatizado que analisa Pull Requests do projeto **seu projeto** no **Bitbu
 - ⚠️ Linhas em branco desnecessárias
 - ⚠️ Violações de padrões de Services, Repositories e Models
 - ⚠️ Falta de testes para novos serviços
+- 🎯 **Novo!** Detecta números/strings hardcoded e sugere **enums específicos** do projeto
 - E muito mais... (30+ regras)
 
 ## 🚀 Como usar?

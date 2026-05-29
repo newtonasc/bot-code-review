@@ -4,10 +4,23 @@
  */
 
 import rules from './rules.js';
+import EnumMatcher from './enum-matcher.js';
 
 export default class CodeAnalyzer {
-  constructor() {
+  constructor(projectContext = null) {
     this.issues = [];
+    this.projectContext = projectContext;
+
+    // Inicializa EnumMatcher com as constantes do projeto
+    this.enumMatcher = null;
+    if (projectContext && projectContext.constants) {
+      this.enumMatcher = new EnumMatcher(projectContext.constants);
+
+      if (this.enumMatcher.hasEnums()) {
+        const stats = this.enumMatcher.getStats();
+        console.log(`📊 EnumMatcher inicializado: ${stats.enumCount} enum(s), ${stats.valueCount} valor(es)`);
+      }
+    }
   }
 
   /**
@@ -46,7 +59,7 @@ export default class CodeAnalyzer {
       const matches = content.match(new RegExp(rule.pattern, 'g'));
       if (matches) {
         matches.forEach((match) => {
-          const result = rule.check ? rule.check(match, filePath) : {
+          const result = rule.check ? rule.check(match, filePath, this.enumMatcher) : {
             message: `Padrão detectado: ${match}`,
           };
           if (result) {
@@ -57,7 +70,7 @@ export default class CodeAnalyzer {
     } else if (rule.check) {
       if (!content) return;
       // Regra baseada em função de verificação
-      const result = rule.check(content, filePath);
+      const result = rule.check(content, filePath, this.enumMatcher);
 
       if (result) {
         if (Array.isArray(result)) {

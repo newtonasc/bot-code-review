@@ -27,6 +27,12 @@ Analisa PRs seguindo padrões customizáveis, integra com **Jira** e **MCP da At
   - Linhas em branco desnecessárias dentro de métodos
   - Violações de padrões de repositories, services e models
   - E muito mais...
+- **🎯 Detecção Inteligente de Enums (Novo!)**:
+  - Detecta números mágicos e strings hardcoded
+  - Sugere **exatamente qual enum usar** do projeto
+  - Analisa automaticamente arquivos em `src/enumerators/`, `src/constants/`
+  - Exemplo: "Use `VehicleStatus.ACTIVE` ao invés do número `1`"
+  - **Mais detalhes**: [ENUM_DETECTION.md](ENUM_DETECTION.md)
 
 ### 🤖 Análise com IA (Novo!)
 - **Claude ou GPT**: Integração opcional com LLMs para análise avançada
@@ -691,6 +697,7 @@ nano scripts/.env.code-review-bot  # configure BITBUCKET_TOKEN, BITBUCKET_WORKSP
 - [ESLint Config](.eslintrc) - Regras de linting
 - [Guia Bitbucket](BITBUCKET.md) - Guia específico para Bitbucket Cloud
 - [Integração com Jira](JIRA_INTEGRATION.md) - Guia completo de integração com Jira
+- [Detecção de Enums](ENUM_DETECTION.md) - Detecção inteligente de números mágicos e sugestão de enums
 - [Documentação Bitbucket API](https://developer.atlassian.com/cloud/bitbucket/rest/) - API do Bitbucket
 
 ## 🤝 Contribuindo

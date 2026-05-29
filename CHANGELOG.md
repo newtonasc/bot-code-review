@@ -1,5 +1,69 @@
 # Changelog - Code Review Bot
 
+## [1.9.0] - 2026-05-29
+
+### 🎯 Detecção Inteligente de Enums e Constantes
+
+O bot agora detecta automaticamente números mágicos e strings hardcoded e **sugere exatamente qual enum usar** do projeto!
+
+#### Funcionalidades
+
+- **Parser Automático**: Analisa arquivos de `src/constants/`, `src/enumerators/`, `src/enums/`, `src/config/`
+- **Sugestões Específicas**: Ao invés de apenas avisar sobre números mágicos, sugere o enum correto
+- **Suporte Múltiplos Formatos**: 
+  - `export const STATUS = { ACTIVE: 1 }`
+  - `const HttpStatus = { OK: 200 }`
+  - `module.exports = { ADMIN: 'admin' }`
+  - `Object.freeze({ ... })`
+- **Detecção de Números e Strings**: Identifica tanto números quanto strings hardcoded em comparações
+
+#### Exemplo
+
+**Antes:**
+```
+⚠️ NÃO hardcode valores. Use Constants, enumerators ou i18n.
+```
+
+**Agora:**
+```
+⚠️ Use o enum VehicleStatus.ACTIVE ao invés do número 1
+💡 Importe e use: VehicleStatus.ACTIVE
+   Definido em: src/enumerators/vehicle-status.js
+```
+
+#### Arquivos Novos
+
+- `enum-matcher.js`: Parser de enums e matching de valores
+- `ENUM_DETECTION.md`: Documentação completa da funcionalidade
+- `test-enum-matcher.js`: Script de teste da funcionalidade
+
+#### Arquivos Modificados
+
+- `code-analyzer.js`: 
+  - Aceita `projectContext` no construtor
+  - Inicializa `EnumMatcher` com constantes do projeto
+  - Passa `enumMatcher` para as regras
+- `rules.js`:
+  - Regra `constants-01` totalmente reescrita
+  - Detecta números e strings em comparações (`===`, `==`, `!==`, `!=`)
+  - Ignora valores comuns (0, 1, -1) e strings com espaços/pontuação
+  - Gera sugestões específicas quando encontra enum compatível
+- `index.js`:
+  - Coleta contexto do projeto **antes** da análise estática (não só para IA)
+  - Cria nova instância de `CodeAnalyzer` com contexto em cada execução
+- `README.md`: Adicionada seção sobre detecção inteligente de enums
+
+#### Estatísticas do Teste
+
+```
+📊 EnumMatcher inicializado: 3 enum(s), 15 valor(es)
+✅ Detecta números: 200 → HttpStatus.OK
+✅ Detecta strings: 'admin' → UserType.ADMIN
+✅ Múltiplas correspondências suportadas
+```
+
+---
+
 ## [1.8.7] - 2026-05-29
 
 ### ✅ Request Changes nativo do Bitbucket (equivalente ao Shift+R)
