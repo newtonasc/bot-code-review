@@ -390,6 +390,11 @@ ${diffScope ? diffScope + '\n' : ''}1. Analise a qualidade do código (legibilid
 4. Se houver contexto do Jira, valide alinhamento com requisitos
 5. Sugira melhorias específicas e acionáveis baseadas nas convenções reais do projeto
 
+**Severidade das sugestões — use EXATAMENTE estes valores:**
+- \`"error"\`: bug confirmado, vulnerabilidade de segurança, quebra de contrato ou comportamento incorreto — deve ser corrigido
+- \`"warning"\`: problema de qualidade, padrão violado, risco potencial ou má prática — deveria ser corrigido
+- \`"info"\`: sugestão de melhoria, legibilidade ou otimização opcional — pode ser ignorado sem impacto
+
 **Formato de resposta (JSON):**
 \`\`\`json
 {
@@ -607,6 +612,13 @@ Responda APENAS com o JSON, sem texto adicional.`;
    * @param {Array} aiAnalyses - Análises da IA por arquivo
    * @returns {Array} Comentários formatados
    */
+  _normalizeSeverity(raw) {
+    const v = (raw || '').toLowerCase();
+    if (['error', 'critical', 'high'].includes(v)) return 'error';
+    if (['warning', 'warn', 'medium'].includes(v)) return 'warning';
+    return 'info';
+  }
+
   formatAIComments(aiAnalyses) {
     const comments = [];
 
@@ -629,7 +641,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
         comments.push({
           file: filePath,
           line: suggestion.line || null,
-          severity: suggestion.severity || 'info',
+          severity: this._normalizeSeverity(suggestion.severity),
           isAI: true,
           body,
         });
