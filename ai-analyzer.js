@@ -56,7 +56,7 @@ export default class AIAnalyzer {
     // Rate limits por provider (requisições por minuto)
     this.rateLimits = {
       'claude': 50,
-      'claude-cli': 30,
+      'claude-cli': 10, // Reduzido de 30 para 10 (mais conservador)
       'openai': 60,
       'github-models': 10,
     };
@@ -199,7 +199,7 @@ export default class AIAnalyzer {
     }
 
     // Delay mínimo entre requisições (evita burst)
-    const minDelay = this.provider === 'github-models' ? 6500 : 1000; // ~9 req/min para GitHub
+    const minDelay = this.provider === 'github-models' ? 6500 : (this.provider === 'claude-cli' ? 6500 : 1000); // ~9 req/min para GitHub e CLI
     if (timeSinceLastRequest < minDelay) {
       await this._sleep(minDelay - timeSinceLastRequest);
     }
@@ -523,10 +523,14 @@ Responda APENAS com o JSON, sem texto adicional.`;
         // Tenta extrair tempo de espera do erro
         let waitTime = this._getRetryAfter(error);
 
-        // Se não conseguiu extrair, usa backoff exponencial
+        // Se não conseguiu extrair, usa backoff exponencial começando em 15s (mínimo real para Anthropic)
         if (!waitTime) {
-          waitTime = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30s
+          waitTime = Math.min(15000 * Math.pow(2, retryCount), 120000); // 15s → 30s → 60s → max 120s
         }
+
+        // Reseta o contador para evitar novo rate limit imediato após o wait
+        this.requestCount = 0;
+        this.lastRequestTime = 0;
 
         const waitSeconds = Math.ceil(waitTime / 1000);
         process.stdout.write(`\n   ⏳ Rate limit atingido. Tentativa ${retryCount + 1}/${maxRetries}. Aguardando ${waitSeconds}s...\n`);
