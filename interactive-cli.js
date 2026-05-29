@@ -271,14 +271,30 @@ export default class InteractiveCLI {
   async selectIssues(comments) {
     this.initReadline();
 
+    const errors   = comments.filter(c => c.severity === 'error');
+    const warnings = comments.filter(c => c.severity === 'warning');
+    const infos    = comments.filter(c => c.severity === 'info');
+
+    const countLabel = (items) => {
+      const s = items.filter(c => !c.isAI).length;
+      const a = items.filter(c =>  c.isAI).length;
+      const parts = [];
+      if (s > 0) parts.push(`${s} estático${s > 1 ? 's' : ''}`);
+      if (a > 0) parts.push(`${a} IA`);
+      return parts.length ? `(${parts.join(' + ')})` : '(0)';
+    };
+
     console.log('\n' + '='.repeat(80));
     console.log('🎯 SELEÇÃO DE ISSUES PARA REVIEW');
     console.log('='.repeat(80) + '\n');
 
     console.log('Selecione quais issues deseja incluir no review:\n');
-    console.log('  [a] Selecionar todas');
-    console.log('  [e] Apenas erros');
-    console.log('  [w] Apenas avisos');
+    console.log(`  [a] Selecionar todas             (${comments.length} total)`);
+    console.log(`  [e] Apenas erros                 ${countLabel(errors)}`);
+    console.log(`  [w] Apenas avisos                ${countLabel(warnings)}`);
+    if (infos.length > 0) {
+      console.log(`  [i] Apenas sugestões (info)      ${countLabel(infos)}`);
+    }
     console.log('  [n] Nenhuma (cancelar)');
     console.log('  [c] Seleção customizada (por número)\n');
 
@@ -293,13 +309,18 @@ export default class InteractiveCLI {
         break;
 
       case 'e':
-        selectedComments = comments.filter(c => c.severity === 'error');
+        selectedComments = errors;
         console.log(`\n✅ ${selectedComments.length} erro(s) selecionado(s).\n`);
         break;
 
       case 'w':
-        selectedComments = comments.filter(c => c.severity === 'warning');
+        selectedComments = warnings;
         console.log(`\n✅ ${selectedComments.length} aviso(s) selecionado(s).\n`);
+        break;
+
+      case 'i':
+        selectedComments = infos;
+        console.log(`\n✅ ${selectedComments.length} sugestão(ões) selecionada(s).\n`);
         break;
 
       case 'n':
@@ -330,15 +351,20 @@ export default class InteractiveCLI {
     console.log('-'.repeat(80) + '\n');
 
     comments.forEach((comment, index) => {
-      const emoji = comment.severity === 'error' ? '🚨' : '⚠️';
-      const lines = comment.body.split('\n');
-      const summary = lines.find(l => l.includes('**Problema:**'));
+      const emoji = comment.severity === 'error' ? '🚨' :
+                    comment.severity === 'warning' ? '⚠️' : '💡';
+      const origin = comment.isAI ? 'IA' : comment.ruleId || '?';
 
-      console.log(`[${index + 1}] ${emoji} ${comment.ruleId} - ${comment.file}`);
-      if (summary) {
-        const problemText = lines[lines.indexOf(summary) + 1];
-        console.log(`    ${problemText || ''}`);
-      }
+      // Extrai primeira linha de conteúdo real (ignora cabeçalhos markdown)
+      const firstLine = comment.body.split('\n')
+        .map(l => l.trim())
+        .find(l => l && !l.startsWith('🤖') && !l.startsWith('**AI') && !l.startsWith('🔒'))
+        || comment.body.split('\n')[0];
+
+      console.log(`[${index + 1}] ${emoji} [${origin}] ${comment.file}`);
+      console.log(`    ${firstLine}`);
+      if (comment.line) console.log(`    📍 Linha ${comment.line}`);
+      console.log('');
     });
 
     console.log('\n' + '-'.repeat(80) + '\n');
