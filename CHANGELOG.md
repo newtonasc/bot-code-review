@@ -1,5 +1,37 @@
 # Changelog - Code Review Bot
 
+## [1.11.1] - 2026-05-29
+
+### 🐛 Correções de Rate Limit e Escopo da IA
+
+#### Rate limit: tempo de espera limitado a 60s
+
+O header `Retry-After` da API do GitHub Models retorna valores em **milissegundos** (ex: `65049`), mas o código multiplicava por 1000 assumindo segundos — resultando em `65.049s` (~18h) de espera.
+
+- Heurística: valores `> 3600` no header são tratados como ms (3600s = 1h seria improvável como retry-after)
+- Teto de **60s** aplicado em todos os caminhos: header `Retry-After`, mensagem de erro e backoff exponencial
+- Backoff exponencial ajustado: `15s → 30s → 60s` (antes ia até 120s)
+
+#### IA analisa somente o diff quando disponível
+
+O `buildPrompt` usava `patch || content` sem distinguir os casos no prompt — a IA recebia o label "Mudanças (diff)" mesmo quando estava vendo o arquivo inteiro, e a instrução de escopo só aparecia quando `patch` era truthy (string vazia era tratada como "sem patch").
+
+- `hasDiff` detecta um diff real pela presença de marcadores `@@`
+- Label e instrução variam conforme o caso:
+  - **Diff disponível** → `Alterações da PR (diff):` + instrução para analisar SOMENTE linhas `+`
+  - **Fallback** → `Conteúdo do arquivo (diff não disponível):` + instrução para focar nas partes provavelmente alteradas
+- Log em `analyzeFiles` indica o modo por arquivo:
+  ```
+  [1/5] Analisando src/adResultPrepareBids.js (diff)...
+  [2/5] Analisando src/adResultDataPrepare.js (arquivo completo)...
+  ```
+
+#### Arquivos modificados
+
+- `ai-analyzer.js`: `_getRetryAfter` com heurística ms/s e teto de 60s; `buildPrompt` com label e instrução de escopo baseados em `hasDiff`; log de modo por arquivo em `analyzeFiles`
+
+---
+
 ## [1.11.0] - 2026-05-29
 
 ### ✅ Aprovação Direta e Comentário Automático no Jira
