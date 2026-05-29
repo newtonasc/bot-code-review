@@ -286,7 +286,8 @@ export default class AIAnalyzer {
     for (const file of files) {
       fileIndex++;
       try {
-        console.log(`   [${fileIndex}/${files.length}] Analisando ${file.filePath}...`);
+        const mode = (file.patch && file.patch.includes('@@')) ? 'diff' : 'arquivo completo';
+        console.log(`   [${fileIndex}/${files.length}] Analisando ${file.filePath} (${mode})...`);
         const analysis = await this.analyzeFile(
           file.filePath,
           file.content,
@@ -350,15 +351,22 @@ export default class AIAnalyzer {
    * @private
    */
   buildPrompt(filePath, content, patch, staticIssues, jiraContext, projectContext = null) {
+    // Um diff real contém marcadores de hunk (@@); diff vazio ou ausente = fallback para arquivo completo
+    const hasDiff = !!(patch && patch.includes('@@'));
+    const codeBlock = hasDiff ? patch : (content || '');
+    const codeLabel = hasDiff
+      ? '**Alterações da PR (diff):**'
+      : '**Conteúdo do arquivo (diff não disponível — analise o arquivo completo):**';
+
     let prompt = `Você é um especialista em code review para projetos Node.js (Express, Sequelize e similares).
 
 **Tarefa:** Analise o código modificado e forneça feedback construtivo, considerando o contexto real do projeto.
 
 **Arquivo:** ${filePath}
 
-**Mudanças (diff):**
+${codeLabel}
 \`\`\`diff
-${patch || content}
+${codeBlock}
 \`\`\`
 
 **Issues detectadas por regras estáticas (${staticIssues.length}):**
@@ -379,12 +387,13 @@ ${staticIssues.map((issue, i) => `${i + 1}. [${issue.severity}] ${issue.rule}: $
 `;
     }
 
-    const diffScope = patch
-      ? '**IMPORTANTE:** Analise e comente SOMENTE as linhas que aparecem como adicionadas (+) ou alteradas no diff acima. Não sinalize problemas em código pré-existente que não foi modificado nesta PR.'
-      : '';
+    const scopeInstruction = hasDiff
+      ? '**IMPORTANTE:** Analise e comente SOMENTE as linhas adicionadas (+) ou modificadas no diff acima. Não sinalize problemas em código pré-existente que não foi alterado nesta PR.'
+      : '**IMPORTANTE:** O diff não está disponível. Analise o arquivo completo, mas foque nas partes que provavelmente foram alteradas com base nas issues estáticas encontradas.';
 
     prompt += `\n**Instruções:**
-${diffScope ? diffScope + '\n' : ''}1. Analise a qualidade do código (legibilidade, manutenibilidade, performance)
+${scopeInstruction}
+1. Analise a qualidade do código (legibilidade, manutenibilidade, performance)
 2. Identifique problemas de segurança ou bugs potenciais
 3. Verifique conformidade com os padrões do projeto (documentação, constantes, enumeradores)
 4. Se houver contexto do Jira, valide alinhamento com requisitos
