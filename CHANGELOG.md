@@ -1,5 +1,63 @@
 # Changelog - Code Review Bot
 
+## [1.8.2] - 2026-05-29
+
+### 🤖 Sugestão de Código Corrigido nos Comentários do PR
+
+#### 🚀 Mudanças Principais
+
+**Exemplos de código nas sugestões da IA**
+
+Os comentários inline postados no PR agora incluem blocos de código com o "antes" e "depois" quando a IA identificar uma correção concreta:
+
+```
+🤖 AI Review
+
+Evite concatenação direta de variáveis em queries SQL.
+
+💡 Sugestão: Use parâmetros preparados ou valide com Joi/Yup
+
+Exemplo de correção:
+// ❌ Antes
+const query = `SELECT * FROM users WHERE id = ${userId}`;
+
+// ✅ Depois
+const query = 'SELECT * FROM users WHERE id = ?';
+db.query(query, [userId]);
+```
+
+O campo `code_example` é opcional — quando a IA não gerar um exemplo concreto (sugestões conceituais, por exemplo), o comentário continua funcionando normalmente com apenas o texto da sugestão.
+
+A linguagem do bloco de código é detectada automaticamente pela extensão do arquivo (`.js` → `javascript`, `.ts` → `typescript`, `.py` → `python`, etc.).
+
+#### 📝 Arquivos Modificados
+
+- `ai-analyzer.js`
+  - Constante `EXT_TO_LANG` mapeia extensão de arquivo → linguagem para syntax highlight
+  - `buildPrompt`: schema JSON da IA inclui campo `code_example` com `before` e `after`
+  - `formatAIComments`: renderiza blocos de código quando `code_example` está presente
+
+---
+
+## [1.8.1] - 2026-05-29
+
+### 🔧 Correção: Backoff Insuficiente para Rate Limit 429
+
+#### Problema
+
+Ao usar o provider `claude-cli`, erros 429 da API da Anthropic causavam apenas 1s → 2s → 4s de espera antes de cada retry — tempo insuficiente para o cooldown real da API. Após 3 tentativas fracassadas o arquivo era descartado da análise.
+
+#### Correção
+
+- Backoff elevado de `1s * 2^n` para `15s * 2^n` (15s → 30s → 60s, máximo 120s)
+- Após receber um 429, o contador de requisições (`requestCount`) e o timestamp (`lastRequestTime`) são resetados, evitando que `_waitForRateLimit` adicione delay extra logo após o retry
+
+#### 📝 Arquivos Modificados
+
+- `ai-analyzer.js` — método `callLLM`: novo cálculo de backoff e reset de contadores após 429
+
+---
+
 ## [1.8.0] - 2026-05-29
 
 ### 🤖 Contexto Semântico do Repositório + Provider Claude CLI

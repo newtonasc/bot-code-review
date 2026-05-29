@@ -8,6 +8,26 @@ import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
+const EXT_TO_LANG = {
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  jsx: 'jsx',
+  py: 'python',
+  java: 'java',
+  rb: 'ruby',
+  go: 'go',
+  php: 'php',
+  cs: 'csharp',
+  cpp: 'cpp', cc: 'cpp', cxx: 'cpp',
+  c: 'c',
+  sh: 'bash', bash: 'bash',
+  json: 'json',
+  yaml: 'yaml', yml: 'yaml',
+  sql: 'sql',
+  html: 'html',
+  css: 'css', scss: 'scss',
+};
+
 /**
  * Lê o token OAuth do Claude CLI armazenado em ~/.claude/.credentials.json
  * @returns {{ token: string, expiresAt: number } | null}
@@ -390,7 +410,11 @@ ${staticIssues.map((issue, i) => `${i + 1}. [${issue.severity}] ${issue.rule}: $
       "line": 45,
       "severity": "error",
       "message": "Adicione validação de entrada para prevenir SQL injection",
-      "suggestion": "Use parâmetros preparados ou valide com Joi/Yup"
+      "suggestion": "Use parâmetros preparados ou valide com Joi/Yup",
+      "code_example": {
+        "before": "const query = \`SELECT * FROM users WHERE id = \${userId}\`;",
+        "after": "const query = 'SELECT * FROM users WHERE id = ?';\\ndb.query(query, [userId]);"
+      }
     }
   ]
 }
@@ -585,12 +609,24 @@ Responda APENAS com o JSON, sem texto adicional.`;
     for (const { filePath, analysis } of aiAnalyses) {
       if (!analysis || !analysis.suggestions) continue;
 
+      const ext = filePath.split('.').pop() || '';
+      const lang = EXT_TO_LANG[ext] || ext;
+
       for (const suggestion of analysis.suggestions) {
+        let body = `🤖 **AI Review**\n\n${suggestion.message}\n\n💡 **Sugestão:** ${suggestion.suggestion}`;
+
+        if (suggestion.code_example) {
+          const { before, after } = suggestion.code_example;
+          body += `\n\n**Exemplo de correção:**\n`;
+          if (before) body += `\`\`\`${lang}\n// ❌ Antes\n${before}\n\`\`\`\n`;
+          if (after)  body += `\`\`\`${lang}\n// ✅ Depois\n${after}\n\`\`\``;
+        }
+
         comments.push({
           file: filePath,
           line: suggestion.line || null,
           severity: suggestion.severity || 'info',
-          body: `🤖 **AI Review**\n\n${suggestion.message}\n\n💡 **Sugestão:** ${suggestion.suggestion}`,
+          body,
         });
       }
 
