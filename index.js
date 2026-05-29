@@ -34,6 +34,9 @@ import InteractiveCLI from './interactive-cli.js';
 import JiraClient from './jira-client.js';
 import AIAnalyzer from './ai-analyzer.js';
 import ProjectContextCollector from './project-context.js';
+import { createRequire } from 'module';
+
+const { version: BOT_VERSION } = createRequire(import.meta.url)('./package.json');
 
 // Ordem de risco crescente para comparação de threshold
 const RISK_ORDER = { low: 0, medium: 1, high: 2 };
@@ -380,7 +383,7 @@ class CodeReviewBot {
     }
 
     body += '\n---\n';
-    body += '*Review gerado automaticamente pelo Code Review Bot v1.4.0*';
+    body += `*Review gerado automaticamente pelo Code Review Bot v${BOT_VERSION}*`;
 
     return body;
   }
