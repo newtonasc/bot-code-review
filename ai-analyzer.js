@@ -176,17 +176,24 @@ export default class AIAnalyzer {
    * @private
    */
   _getRetryAfter(error) {
+    const MAX_WAIT_MS = 60000; // teto de 60s independente do que a API retornar
+
     // Tenta header Retry-After
     const retryAfter = error.response?.headers['retry-after'];
     if (retryAfter) {
-      return parseInt(retryAfter) * 1000; // Converte para ms
+      const raw = parseInt(retryAfter);
+      if (!isNaN(raw) && raw > 0) {
+        // Heurística: valores > 3600 já estão em ms (3600s = 1h é improvável como retry)
+        const ms = raw > 3600 ? raw : raw * 1000;
+        return Math.min(ms, MAX_WAIT_MS);
+      }
     }
 
     // Tenta extrair da mensagem de erro
     const message = error.response?.data?.error?.message || '';
     const match = message.match(/wait (\d+) seconds?/i);
     if (match) {
-      return parseInt(match[1]) * 1000; // Converte para ms
+      return Math.min(parseInt(match[1]) * 1000, MAX_WAIT_MS);
     }
 
     // Fallback: backoff exponencial baseado na tentativa
@@ -565,9 +572,9 @@ Responda APENAS com o JSON, sem texto adicional.`;
         // Tenta extrair tempo de espera do erro
         let waitTime = this._getRetryAfter(error);
 
-        // Se não conseguiu extrair, usa backoff exponencial começando em 15s (mínimo real para Anthropic)
+        // Se não conseguiu extrair, usa backoff exponencial com teto de 60s
         if (!waitTime) {
-          waitTime = Math.min(15000 * Math.pow(2, retryCount), 120000); // 15s → 30s → 60s → max 120s
+          waitTime = Math.min(15000 * Math.pow(2, retryCount), 60000); // 15s → 30s → 60s
         }
 
         // Reseta o contador para evitar novo rate limit imediato após o wait
