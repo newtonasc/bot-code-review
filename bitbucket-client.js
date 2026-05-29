@@ -303,7 +303,7 @@ export default class BitbucketClient {
           `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/diff`
         );
       } catch (err) {
-        console.warn(`⚠️  Diff não disponível, análise usará arquivo completo: ${err.message}`);
+        console.log(`ℹ️  Endpoint de diff não disponível neste repositório, patch será gerado localmente.`);
         return {};
       }
     }
