@@ -7,6 +7,7 @@
  */
 
 import axios from 'axios';
+import { createPatch } from 'diff';
 
 export default class BitbucketClient {
   constructor(token, workspace, repoSlug, username = null) {
@@ -224,6 +225,7 @@ export default class BitbucketClient {
       // Busca diff unificado para popular o patch de cada arquivo
       console.log(`🔍 Buscando diff unificado da PR...`);
       const patchMap = await this._fetchPatchMap(destHash, sourceHash, prNumber);
+      const apiPatchAvailable = Object.keys(patchMap).length > 0;
 
       // Busca conteúdo de cada arquivo
       console.log(`🔍 Buscando conteúdo dos arquivos...`);
@@ -240,6 +242,12 @@ export default class BitbucketClient {
               console.warn(`⚠️  Conteúdo não disponível para: ${filePath}`);
             }
 
+            // Determina o patch: API > gerado localmente via diff de conteúdo
+            let patch = patchMap[filePath] || null;
+            if (!patch && content !== null) {
+              patch = await this._generateFilePatch(filePath, file.status, content, destHash);
+            }
+
             return {
               filename: filePath,
               status: file.status,
@@ -247,7 +255,7 @@ export default class BitbucketClient {
               deletions: file.lines_removed || 0,
               changes: (file.lines_added || 0) + (file.lines_removed || 0),
               sha: commitHash,
-              patch: patchMap[filePath] || null,
+              patch,
               content,
             };
           } catch (err) {
@@ -256,6 +264,11 @@ export default class BitbucketClient {
           }
         })
       );
+
+      if (!apiPatchAvailable) {
+        const withPatch = filesWithContent.filter(f => f?.patch).length;
+        console.log(`✅ Patch gerado localmente para ${withPatch} arquivo(s)`);
+      }
 
       const validFiles = filesWithContent.filter(f => f !== null);
       console.log(`✅ ${validFiles.length} arquivo(s) processado(s) com sucesso`);
@@ -296,6 +309,22 @@ export default class BitbucketClient {
     }
 
     return this._parseDiffByFile(diffText);
+  }
+
+  /**
+   * Gera um patch unificado para um arquivo comparando versão base (destHash)
+   * com a versão da PR (sourceHash). Usado quando os endpoints de diff retornam 404.
+   */
+  async _generateFilePatch(filePath, status, newContent, destHash) {
+    let oldContent = '';
+    if (status !== 'added') {
+      try {
+        oldContent = await this.getFileContent(filePath, destHash);
+      } catch {
+        // Arquivo não existe na base — trata como novo
+      }
+    }
+    return createPatch(filePath, oldContent, newContent, destHash, 'HEAD');
   }
 
   /**
