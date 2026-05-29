@@ -289,6 +289,12 @@ class CodeReviewBot {
 
       this.cli.displaySuccess(review.html_url);
 
+      // Posta comentário de status no Jira (se houver issue vinculada)
+      if (jiraAnalysis?.found && jiraAnalysis?.key) {
+        const selectedAICount = selectedComments.filter(c => c.isAI).length;
+        await this.jira.addReviewComment(jiraAnalysis.key, reviewType, pr, report, selectedAICount);
+      }
+
     } catch (error) {
       this.cli.displayError(error);
       process.exit(1);

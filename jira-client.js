@@ -22,21 +22,29 @@ export default class JiraClient {
    * @param {string} issueKey - Chave da issue (ex: PROJ-123)
    * @returns {Object|null} Dados da issue ou null
    */
+  _getBaseUrl() {
+    const rawSite = this.siteUrl ? this.siteUrl.replace(/\/$/, '') : null;
+    const site = rawSite ? (rawSite.startsWith('http') ? rawSite : `https://${rawSite}`) : null;
+    return site
+      ? `${site}/rest/api/3`
+      : `https://api.atlassian.com/ex/jira/${this.cloudId}/rest/api/3`;
+  }
+
+  _getAxiosConfig() {
+    return {
+      auth: { username: this.email, password: this.apiToken },
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      timeout: 15000,
+    };
+  }
+
   async fetchIssueViaAPI(issueKey) {
     if (!this.apiEnabled) return null;
 
-    const rawSite = this.siteUrl ? this.siteUrl.replace(/\/$/, '') : null;
-    const site = rawSite ? (rawSite.startsWith('http') ? rawSite : `https://${rawSite}`) : null;
-    const base = site
-      ? `${site}/rest/api/3`
-      : `https://api.atlassian.com/ex/jira/${this.cloudId}/rest/api/3`;
+    const base = this._getBaseUrl();
 
     try {
-      const response = await axios.get(`${base}/issue/${issueKey}`, {
-        auth: { username: this.email, password: this.apiToken },
-        headers: { Accept: 'application/json' },
-        timeout: 15000,
-      });
+      const response = await axios.get(`${base}/issue/${issueKey}`, this._getAxiosConfig());
       return response.data;
     } catch (error) {
       const status = error.response?.status;
@@ -55,6 +63,83 @@ export default class JiraClient {
       }
       return null;
     }
+  }
+
+  /**
+   * Posta um comentário de code review na issue do Jira.
+   * @param {string} issueKey - Chave da issue (ex: NOVA-5099)
+   * @param {string} reviewType - APPROVE | REQUEST_CHANGES | COMMENT
+   * @param {Object} pr - Dados da PR { id, title, links }
+   * @param {Object} report - Relatório { totalIssues, issuesBySeverity }
+   * @param {number} aiCount - Quantidade de sugestões da IA postadas
+   */
+  async addReviewComment(issueKey, reviewType, pr, report, aiCount = 0) {
+    if (!this.apiEnabled) return;
+
+    const { icon, headline } = this._reviewCommentMeta(reviewType, report);
+
+    const prLink = pr?.links?.html?.href || pr?.links?.self?.[0]?.href || null;
+    const prTitle = pr?.title || `PR #${pr?.id}`;
+    const prRef = prLink ? `[${prTitle}](${prLink})` : prTitle;
+
+    const errors = report?.issuesBySeverity?.error || 0;
+    const warnings = report?.issuesBySeverity?.warning || 0;
+    const totalStatic = errors + warnings;
+
+    const lines = [`${icon} *${headline}*`, '', `*PR:* ${prRef}`];
+
+    if (totalStatic > 0 || aiCount > 0) {
+      lines.push('', '*Findings:*');
+      if (errors > 0)   lines.push(`  • ${errors} erro(s)`);
+      if (warnings > 0) lines.push(`  • ${warnings} aviso(s)`);
+      if (aiCount > 0)  lines.push(`  • ${aiCount} sugestão(ões) da IA`);
+    }
+
+    const timestamp = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    lines.push('', `_🤖 Code Review Bot — ${timestamp}_`);
+
+    const body = {
+      body: {
+        type: 'doc',
+        version: 1,
+        content: lines.map(line =>
+          line === ''
+            ? { type: 'paragraph', content: [] }
+            : {
+                type: 'paragraph',
+                content: [{ type: 'text', text: line }],
+              }
+        ),
+      },
+    };
+
+    try {
+      await axios.post(
+        `${this._getBaseUrl()}/issue/${issueKey}/comment`,
+        body,
+        this._getAxiosConfig()
+      );
+      console.log(`✅ Comentário postado no Jira ${issueKey}: "${headline}"`);
+    } catch (err) {
+      console.warn(`⚠️  Não foi possível postar comentário no Jira: ${err.response?.status || err.message}`);
+    }
+  }
+
+  _reviewCommentMeta(reviewType, report) {
+    const errors = report?.issuesBySeverity?.error || 0;
+    const warnings = report?.issuesBySeverity?.warning || 0;
+    const hasIssues = errors > 0 || warnings > 0;
+
+    if (reviewType === 'REQUEST_CHANGES') {
+      return { icon: '🚨', headline: 'Alterações solicitadas na PR' };
+    }
+    if (reviewType === 'COMMENT') {
+      return { icon: 'ℹ️', headline: 'Adicionado comentário(s) na PR' };
+    }
+    // APPROVE
+    return hasIssues
+      ? { icon: '⚠️', headline: 'PR aprovado com comentário(s)' }
+      : { icon: '✅', headline: 'PR aprovado' };
   }
 
   /**
