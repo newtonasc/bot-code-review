@@ -1,5 +1,31 @@
 # Changelog - Code Review Bot
 
+## [1.8.6] - 2026-05-29
+
+### 🔧 BITBUCKET_ACCOUNT_ID como fallback para detecção de reviews anteriores
+
+Tokens de repositório do Bitbucket não têm permissão para `GET /user` (403), o que impedia a detecção de aprovação por `account_id` na feature de revisão anterior (v1.8.5).
+
+**Nova variável de ambiente:**
+
+```env
+# Account ID do usuário Bitbucket (UUID fixo, não muda)
+# Usado como fallback quando o token não tem permissão para GET /user (403)
+# Obtenha com: curl -u "seu-email:seu-token" https://api.bitbucket.org/2.0/user | jq '.account_id'
+BITBUCKET_ACCOUNT_ID=
+```
+
+**Comportamento:**
+- Se `GET /user` retornar 403 **e** `BITBUCKET_ACCOUNT_ID` estiver configurado → usa o valor do `.env` como `account_id`, mantendo detecção completa de aprovação e REQUEST_CHANGES
+- Se `GET /user` retornar 403 **e** `BITBUCKET_ACCOUNT_ID` não estiver configurado → exibe aviso orientando a configurar a variável; detecção de aprovação fica indisponível, mas REQUEST_CHANGES ainda é detectado pela assinatura do comentário
+
+#### 📝 Arquivos Modificados
+
+- `.env.example` — novo parâmetro `BITBUCKET_ACCOUNT_ID` com instruções de como obter o valor
+- `index.js` — fallback para `BITBUCKET_ACCOUNT_ID` no bloco catch do `getAuthenticatedUser`
+
+---
+
 ## [1.8.5] - 2026-05-29
 
 ### 🔍 Detecção de Review Anterior
