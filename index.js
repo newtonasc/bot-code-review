@@ -87,7 +87,13 @@ class CodeReviewBot {
       } catch (err) {
         // Ignora erro 403 (token pode não ter permissão para /user)
         if (err.message.includes('403')) {
-          console.log(`⚠️  Não foi possível buscar informações do usuário (permissão não concedida)\n`);
+          const fallbackAccountId = process.env.BITBUCKET_ACCOUNT_ID;
+          if (fallbackAccountId) {
+            currentUser = { account_id: fallbackAccountId };
+            console.log(`⚠️  Não foi possível buscar informações do usuário via API. Usando BITBUCKET_ACCOUNT_ID do .env\n`);
+          } else {
+            console.log(`⚠️  Não foi possível buscar informações do usuário (permissão não concedida). Configure BITBUCKET_ACCOUNT_ID no .env para detecção precisa de reviews anteriores.\n`);
+          }
         } else {
           throw err;
         }
