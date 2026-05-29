@@ -114,10 +114,10 @@ export default class BitbucketClient {
 
       // Método 1: Comparação de commits
       if (sourceHash && destHash && !this.unavailableEndpoints.has(method1Key)) {
-        console.log(`🔍 Método 1: Comparação de commits (${destHash.substring(0, 7)}..${sourceHash.substring(0, 7)})...`);
+        console.log(`🔍 Método 1: Comparação de commits (${destHash.substring(0, 7)}...${sourceHash.substring(0, 7)})...`);
         try {
           const allFiles = new Map();
-          let nextUrl = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/diffstat/${destHash}..${sourceHash}`;
+          let nextUrl = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/diffstat/${destHash}...${sourceHash}`;
 
           while (nextUrl) {
             const response = await axios.get(nextUrl, this._getAxiosConfig());
