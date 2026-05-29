@@ -1,5 +1,37 @@
 # Changelog - Code Review Bot
 
+## [1.8.4] - 2026-05-29
+
+### 🐛 Correções: URL do Review e Comentários Inline
+
+#### Problema 1 — URL exibida como `undefined`
+
+O terminal exibia `🔗 URL: undefined` após criar o review. O Bitbucket não retorna um campo `html_url` como o GitHub — o objeto retornado pela API é um comentário ou aprovação, não um recurso de review com link direto.
+
+**Correção:** o objeto de resultado de `createReview` agora inclui `html_url` construída a partir de `workspace`, `repoSlug` e `prNumber`:
+```
+https://bitbucket.org/{workspace}/{repo}/pull-requests/{prNumber}
+```
+
+#### Problema 2 — HTTP 400 ao adicionar comentário inline
+
+Comentários inline falhavam com status 400 quando a linha reportada não fazia parte do diff da PR (linhas fora do contexto modificado). O erro era exibido duas vezes no terminal por duplicação na cadeia de mensagens de erro.
+
+**Correções:**
+- `addInlineComment`: converte o número de linha para inteiro com `parseInt` antes de enviar à API (evita rejeição por tipo incorreto)
+- `addInlineComment`: preserva `error.response` no erro relançado para que o chamador possa identificar o status HTTP
+- `createReview`: quando inline retorna 400, faz fallback automático para comentário geral com contexto `arquivo:linha` no texto — nenhuma issue é perdida
+
+#### 📝 Arquivos Modificados
+
+- `bitbucket-client.js`
+  - `createReview`: `html_url` adicionado ao objeto de resultado
+  - `addInlineComment`: `parseInt(line, 10)` na propriedade `to` do payload
+  - `addInlineComment`: `err.response = error.response` preserva o status HTTP
+  - `createReview`: bloco catch com fallback para `addComment` em caso de 400
+
+---
+
 ## [1.8.3] - 2026-05-29
 
 ### 🤖 Automação de Approve e Request Changes

@@ -91,6 +91,7 @@ npm run code-review 123 -- --dry-run
 
 O Bitbucket suporta comentários inline nativamente. O bot:
 - ✅ Adiciona comentários inline em linhas específicas
+- ✅ Fallback automático para comentário geral quando a linha não está no diff
 - ✅ Agrupa comentários relacionados
 - ✅ Usa Markdown para formatação
 
@@ -293,11 +294,9 @@ export BITBUCKET_REPO_SLUG=nome-correto-do-repo
 
 ### Comentários não aparecem inline
 
-**Causa:** Número de linha inválido ou arquivo não existe no diff
+**Causa:** A linha reportada não faz parte do diff da PR (linhas fora do contexto modificado).
 
-**Solução:**
-- Comentários inline só funcionam em linhas modificadas
-- Se a linha não estiver no diff, o comentário será geral
+**Comportamento atual:** O bot tenta postar o comentário inline. Se a API retornar 400, faz fallback automático para comentário geral com o contexto `arquivo:linha` no texto — nenhuma issue é perdida.
 
 ## 📚 Documentação Adicional
 

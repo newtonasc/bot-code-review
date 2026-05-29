@@ -160,9 +160,9 @@ npm install
 
 **Problema:** Comentários aparecem como gerais, não inline
 
-**Causa:** Linha não está no diff da PR
+**Causa:** A linha reportada não faz parte do diff da PR.
 
-**Explicação:** Comentários inline só funcionam em linhas modificadas. Isso é normal e esperado.
+**Comportamento atual:** O bot tenta postar inline e, se a API rejeitar (HTTP 400), faz fallback automático para comentário geral incluindo o contexto `arquivo:linha` — nenhuma issue é silenciada.
 
 ## 📚 Documentação Atualizada
 
