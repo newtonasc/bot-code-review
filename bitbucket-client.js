@@ -409,26 +409,29 @@ export default class BitbucketClient {
   }
 
   /**
-   * Solicita mudanças em uma PR (via comentário)
-   * Bitbucket não tem "Request Changes" formal como GitHub
+   * Aciona o "Request Changes" nativo do Bitbucket (equivalente ao Shift+R na UI)
+   * Fallback para remoção de aprovação se o token não tiver permissão
    * @param {number} prNumber - Número da PR
-   * @param {string} body - Corpo da solicitação
-   * @returns {Object} Dados do comentário
+   * @returns {Object|null} Dados do participante ou null no fallback
    */
-  async requestChanges(prNumber, body) {
+  async requestChanges(prNumber) {
     try {
-      // Adiciona comentário solicitando mudanças
-      const comment = await this.addComment(prNumber, body);
-
-      // Remove aprovação se existir
-      try {
-        await this.unapprovePullRequest(prNumber);
-      } catch (err) {
-        // Ignora erro se não havia aprovação
-      }
-
-      return comment;
+      const response = await axios.post(
+        `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/request-changes`,
+        {},
+        this._getAxiosConfig()
+      );
+      return response.data;
     } catch (error) {
+      // Fallback: remove aprovação existente se o endpoint não estiver disponível
+      if (error.response?.status === 404 || error.response?.status === 405) {
+        try {
+          await this.unapprovePullRequest(prNumber);
+        } catch (err) {
+          // Ignora se não havia aprovação
+        }
+        return null;
+      }
       throw new Error(`Erro ao solicitar mudanças na PR #${prNumber}: ${error.message}`);
     }
   }
@@ -465,7 +468,7 @@ export default class BitbucketClient {
   async getExistingBotReview(prNumber, prData, currentUser = null) {
     const accountId = currentUser?.account_id;
 
-    // Verifica aprovação via participants da PR
+    // Verifica status do participante (aprovação ou request changes nativo)
     if (accountId) {
       const participant = (prData.participants || []).find(
         p => p.user?.account_id === accountId
@@ -473,15 +476,18 @@ export default class BitbucketClient {
       if (participant?.approved) {
         return { status: 'approved' };
       }
+      if (participant?.state === 'changes_requested') {
+        return { status: 'request_changes' };
+      }
     }
 
-    // Verifica se existe comentário de review do bot nos comentários da PR
+    // Fallback: verifica comentário com assinatura do bot (tokens sem account_id
+    // ou PRs criadas antes da migração para o endpoint nativo)
     const comments = await this.listComments(prNumber);
     const BOT_SIGNATURE = 'Code Review Bot v';
     const botComment = comments.find(c => {
       const text = c.content?.raw || '';
       if (!text.includes(BOT_SIGNATURE)) return false;
-      // Com account_id disponível, restringe ao autor correto
       if (accountId) return c.user?.account_id === accountId;
       return true;
     });
@@ -597,7 +603,7 @@ export default class BitbucketClient {
       if (action === 'APPROVE') {
         result.approval = await this.approvePullRequest(prNumber);
       } else if (action === 'REQUEST_CHANGES') {
-        await this.requestChanges(prNumber, body || 'Mudanças solicitadas');
+        await this.requestChanges(prNumber);
       }
 
       return result;

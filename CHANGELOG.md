@@ -1,5 +1,38 @@
 # Changelog - Code Review Bot
 
+## [1.8.7] - 2026-05-29
+
+### ✅ Request Changes nativo do Bitbucket (equivalente ao Shift+R)
+
+O método `requestChanges` agora utiliza o endpoint oficial da API do Bitbucket
+(`POST /pullrequests/{id}/request-changes`), o mesmo acionado pelo botão
+"Request changes" (Shift+R) na interface web.
+
+**Antes:** postava um comentário e removia a aprovação — sem alterar o status formal da PR.
+
+**Agora:**
+- Aciona `POST /request-changes` → muda o participante para `state: "changes_requested"` na PR
+- A PR fica bloqueada para merge até que as mudanças sejam endereçadas
+- Fallback automático: se o token não tiver permissão (404/405), remove a aprovação existente e continua
+
+**Detecção de review anterior atualizada:**
+- `getExistingBotReview` agora verifica `participant.state === 'changes_requested'` nos participants
+  antes de varrer comentários — detecção mais rápida e confiável
+- Fallback por assinatura de comentário mantido para tokens sem `account_id` e PRs anteriores
+
+**Correção de comentário duplicado:**
+- `createReview` não passa mais o `body` para `requestChanges` — o resumo é postado
+  uma única vez como comentário principal, e o `request-changes` é acionado separadamente
+
+#### 📝 Arquivos Modificados
+
+- `bitbucket-client.js`
+  - `requestChanges`: usa `POST /request-changes` com fallback para remoção de aprovação
+  - `createReview`: chama `requestChanges(prNumber)` sem repassar o body
+  - `getExistingBotReview`: detecta `state: 'changes_requested'` nos participants antes dos comentários
+
+---
+
 ## [1.8.6] - 2026-05-29
 
 ### 🔧 BITBUCKET_ACCOUNT_ID como fallback para detecção de reviews anteriores
