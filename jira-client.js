@@ -136,7 +136,11 @@ export default class JiraClient {
     if (reviewType === 'COMMENT') {
       return { icon: 'ℹ️', headline: 'Adicionado comentário(s) na PR' };
     }
-    // APPROVE
+    if (reviewType === 'APPROVE') {
+      // Aprovação direta: sem comentários inline, independente de issues encontradas
+      return { icon: '✅', headline: 'PR aprovado' };
+    }
+    // APPROVE_WITH_COMMENTS
     return hasIssues
       ? { icon: '⚠️', headline: 'PR aprovado com comentário(s)' }
       : { icon: '✅', headline: 'PR aprovado' };

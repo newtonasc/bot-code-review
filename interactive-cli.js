@@ -408,6 +408,7 @@ export default class InteractiveCLI {
     const typeLabels = {
       COMMENT: 'comentário',
       REQUEST_CHANGES: 'solicitação de mudanças',
+      APPROVE_WITH_COMMENTS: 'aprovação com comentários',
       APPROVE: 'aprovação',
     };
 
@@ -416,10 +417,15 @@ export default class InteractiveCLI {
     console.log('='.repeat(80) + '\n');
 
     console.log(`Você está prestes a criar um review do tipo: ${typeLabels[reviewType]}`);
-    console.log(`Comentários a serem postados: ${issuesCount}`);
-    if (staticCount > 0 || aiCount > 0) {
-      console.log(`  • Análise estática: ${staticCount}`);
-      console.log(`  • Sugestões da IA:  ${aiCount}`);
+
+    if (reviewType === 'APPROVE') {
+      console.log('Comentários de issues não serão postados (aprovação direta).');
+    } else {
+      console.log(`Comentários a serem postados: ${issuesCount}`);
+      if (staticCount > 0 || aiCount > 0) {
+        console.log(`  • Análise estática: ${staticCount}`);
+        console.log(`  • Sugestões da IA:  ${aiCount}`);
+      }
     }
     console.log();
 
@@ -444,27 +450,26 @@ export default class InteractiveCLI {
     console.log('='.repeat(80) + '\n');
 
     if (aiSuggestion) {
-      const emoji = aiSuggestion === 'APPROVE' ? '✅' :
+      const emoji = aiSuggestion === 'APPROVE' || aiSuggestion === 'APPROVE_WITH_COMMENTS' ? '✅' :
         aiSuggestion === 'REQUEST_CHANGES' ? '🔴' : '💬';
       console.log(`${emoji} Sugestão da IA: ${aiSuggestion}\n`);
     }
 
     console.log('Selecione o tipo de review:\n');
-    console.log('  [1] REQUEST_CHANGES - Solicitar mudanças (recomendado se há erros)');
-    console.log('  [2] COMMENT - Apenas comentar');
-    console.log('  [3] APPROVE - Aprovar com comentários\n');
+    console.log('  [1] REQUEST_CHANGES      - Solicitar mudanças (recomendado se há erros)');
+    console.log('  [2] COMMENT              - Apenas comentar');
+    console.log('  [3] APPROVE_WITH_COMMENTS - Aprovar com comentários');
+    console.log('  [4] APPROVE              - Aprovar (sem comentários de issues)\n');
 
-    const choice = await this.question('Escolha uma opção (1-3): ');
+    const choice = await this.question('Escolha uma opção (1-4): ');
 
     this.closeReadline();
 
     switch (choice) {
-      case '1':
-        return 'REQUEST_CHANGES';
-      case '2':
-        return 'COMMENT';
-      case '3':
-        return 'APPROVE';
+      case '1': return 'REQUEST_CHANGES';
+      case '2': return 'COMMENT';
+      case '3': return 'APPROVE_WITH_COMMENTS';
+      case '4': return 'APPROVE';
       default:
         console.log('\n⚠️  Opção inválida. Usando sugestão padrão.\n');
         return aiSuggestion || (hasErrors ? 'REQUEST_CHANGES' : 'COMMENT');

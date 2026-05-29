@@ -253,29 +253,33 @@ class CodeReviewBot {
         return;
       }
 
-      // Se não houver issues, finaliza (apenas no fluxo interativo)
-      if (report.totalIssues === 0) {
-        console.log('✨ Nada a reportar. O código está seguindo os padrões!\n');
-        return;
-      }
-
-      // Seleção interativa de issues
-      const selectedComments = await this.cli.selectIssues(comments);
-
-      if (selectedComments.length === 0) {
-        console.log('ℹ️  Nenhuma issue selecionada. Operação cancelada.\n');
-        return;
-      }
-
       // Seleciona tipo de review
-      const hasErrors = selectedComments.some(c => c.severity === 'error');
-      const suggestedReviewType = aiSummary && aiSummary.recommendation ?
-        aiSummary.recommendation : (hasErrors ? 'REQUEST_CHANGES' : 'COMMENT');
+      const hasErrors = comments.some(c => c.severity === 'error');
+      const suggestedReviewType = aiSummary?.recommendation || (hasErrors ? 'REQUEST_CHANGES' : 'COMMENT');
       const reviewType = await this.cli.selectReviewType(hasErrors, suggestedReviewType);
+
+      // APPROVE direto: pula seleção de issues
+      let selectedComments = [];
+      if (reviewType === 'APPROVE') {
+        // Nenhum comentário inline será postado
+      } else {
+        // Para os demais tipos, exige ao menos um comentário
+        if (comments.length === 0) {
+          console.log('✨ Nada a reportar. O código está seguindo os padrões!\n');
+          return;
+        }
+
+        selectedComments = await this.cli.selectIssues(comments);
+
+        if (selectedComments.length === 0) {
+          console.log('ℹ️  Nenhuma issue selecionada. Operação cancelada.\n');
+          return;
+        }
+      }
 
       // Confirma criação do review
       const selectedStatic = selectedComments.filter(c => !c.isAI).length;
-      const selectedAI = selectedComments.filter(c => c.isAI).length;
+      const selectedAI    = selectedComments.filter(c =>  c.isAI).length;
       const confirmed = await this.cli.confirmReview(selectedComments.length, reviewType, selectedStatic, selectedAI);
 
       if (!confirmed) {
@@ -315,7 +319,10 @@ class CodeReviewBot {
 
     // Mapeia tipo de review para ação do Bitbucket
     const action = reviewType === 'REQUEST_CHANGES' ? 'REQUEST_CHANGES' :
-      reviewType === 'APPROVE' ? 'APPROVE' : 'COMMENT';
+      (reviewType === 'APPROVE' || reviewType === 'APPROVE_WITH_COMMENTS') ? 'APPROVE' : 'COMMENT';
+
+    // APPROVE direto: não posta comentários inline
+    if (reviewType === 'APPROVE') comments = [];
 
     // Prepara comentários inline para Bitbucket
     const inlineComments = comments
