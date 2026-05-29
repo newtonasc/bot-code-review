@@ -434,21 +434,63 @@ export default class BitbucketClient {
   }
 
   /**
-   * Lista comentários de uma PR
+   * Lista comentários de uma PR (todas as páginas)
    * @param {number} prNumber - Número da PR
    * @returns {Array} Lista de comentários
    */
   async listComments(prNumber) {
     try {
-      const response = await axios.get(
-        `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/comments`,
-        this._getAxiosConfig()
-      );
+      const comments = [];
+      let url = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/comments?pagelen=50`;
 
-      return response.data.values || [];
+      while (url) {
+        const response = await axios.get(url, this._getAxiosConfig());
+        comments.push(...(response.data.values || []));
+        url = response.data.next || null;
+      }
+
+      return comments;
     } catch (error) {
       throw new Error(`Erro ao listar comentários da PR #${prNumber}: ${error.message}`);
     }
+  }
+
+  /**
+   * Verifica se o bot já realizou um review nesta PR
+   * @param {number} prNumber - Número da PR
+   * @param {Object} prData - Dados da PR já buscados
+   * @param {Object|null} currentUser - Usuário autenticado (pode ser null)
+   * @returns {{ status: 'approved'|'request_changes'|'none' }}
+   */
+  async getExistingBotReview(prNumber, prData, currentUser = null) {
+    const accountId = currentUser?.account_id;
+
+    // Verifica aprovação via participants da PR
+    if (accountId) {
+      const participant = (prData.participants || []).find(
+        p => p.user?.account_id === accountId
+      );
+      if (participant?.approved) {
+        return { status: 'approved' };
+      }
+    }
+
+    // Verifica se existe comentário de review do bot nos comentários da PR
+    const comments = await this.listComments(prNumber);
+    const BOT_SIGNATURE = 'Code Review Bot v';
+    const botComment = comments.find(c => {
+      const text = c.content?.raw || '';
+      if (!text.includes(BOT_SIGNATURE)) return false;
+      // Com account_id disponível, restringe ao autor correto
+      if (accountId) return c.user?.account_id === accountId;
+      return true;
+    });
+
+    if (botComment) {
+      return { status: 'request_changes' };
+    }
+
+    return { status: 'none' };
   }
 
   /**

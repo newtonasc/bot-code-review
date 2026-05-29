@@ -1,5 +1,35 @@
 # Changelog - Code Review Bot
 
+## [1.8.5] - 2026-05-29
+
+### 🔍 Detecção de Review Anterior
+
+O bot agora verifica, antes de iniciar qualquer análise, se já realizou um review nesta PR. Se encontrar, informa o usuário e aborta o processo.
+
+**Casos detectados:**
+
+| Situação | Mensagem | Ação |
+|---|---|---|
+| Bot já aprovou a PR | "O bot já aprovou esta PR. Para criar um novo review, remova a aprovação primeiro." | Aborta |
+| Bot já fez REQUEST_CHANGES (comentário com assinatura do bot presente) | "O bot já realizou um code review com REQUEST_CHANGES nesta PR e ele ainda está em aberto." | Aborta |
+| Nenhum review anterior | "Nenhum review anterior encontrado" | Continua normalmente |
+
+**Como funciona:**
+- **Aprovação**: verifica o array `participants` da PR comparando `account_id` do usuário autenticado
+- **REQUEST_CHANGES**: varre todos os comentários da PR buscando a assinatura `Code Review Bot v`. Com `account_id` disponível, restringe ao autor correto; sem ele (token sem permissão para `/user`), usa apenas a assinatura
+- Paginação tratada em `listComments`: busca todas as páginas antes de verificar
+
+#### 📝 Arquivos Modificados
+
+- `bitbucket-client.js`
+  - `listComments`: reescrito com loop de paginação (`pagelen=50` por página)
+  - `getExistingBotReview(prNumber, prData, currentUser)`: novo método que verifica aprovação via `participants` e REQUEST_CHANGES via comentários
+- `index.js`
+  - `run()`: `currentUser` armazenado fora do try/catch para ficar disponível após a autenticação
+  - `run()`: chamada a `getExistingBotReview` logo após buscar a PR, antes de qualquer análise
+
+---
+
 ## [1.8.4] - 2026-05-29
 
 ### 🐛 Correções: URL do Review e Comentários Inline

@@ -79,10 +79,11 @@ class CodeReviewBot {
       this.cli.displayProgress('Validando acesso ao Bitbucket');
       await this.bitbucket.validateAccess();
 
-      // Tenta buscar informações do usuário (opcional, pode falhar com alguns tokens)
+      // Tenta buscar informações do usuário autenticado (opcional, pode falhar com alguns tokens)
+      let currentUser = null;
       try {
-        const user = await this.bitbucket.getAuthenticatedUser();
-        console.log(`✅ Autenticado como: ${user.username || user.display_name}\n`);
+        currentUser = await this.bitbucket.getAuthenticatedUser();
+        console.log(`✅ Autenticado como: ${currentUser.username || currentUser.display_name}\n`);
       } catch (err) {
         // Ignora erro 403 (token pode não ter permissão para /user)
         if (err.message.includes('403')) {
@@ -96,6 +97,19 @@ class CodeReviewBot {
       this.cli.displayProgress(`Buscando informações da PR #${prNumber}`);
       const pr = await this.bitbucket.getPullRequest(prNumber);
       console.log(`✅ PR encontrada: ${pr.title}\n`);
+
+      // Verifica se o bot já realizou um review nesta PR
+      this.cli.displayProgress('Verificando reviews anteriores');
+      const existingReview = await this.bitbucket.getExistingBotReview(prNumber, pr, currentUser);
+      if (existingReview.status === 'approved') {
+        console.log('ℹ️  O bot já aprovou esta PR. Para criar um novo review, remova a aprovação primeiro.\n');
+        return;
+      }
+      if (existingReview.status === 'request_changes') {
+        console.log('ℹ️  O bot já realizou um code review com REQUEST_CHANGES nesta PR e ele ainda está em aberto.\n');
+        return;
+      }
+      console.log('✅ Nenhum review anterior encontrado\n');
 
       // Busca issue relacionada (Bitbucket/Jira)
       let issue = null;
