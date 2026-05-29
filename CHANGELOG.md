@@ -1,5 +1,71 @@
 # Changelog - Code Review Bot
 
+## [1.8.0] - 2026-05-29
+
+### 🤖 Contexto Semântico do Repositório + Provider Claude CLI
+
+#### 🚀 Mudanças Principais
+
+**Novo: Coleta de Contexto Semântico (`project-context.js`)**
+
+O bot agora realiza 4 buscas semânticas no repositório alvo antes de enviar a análise para a IA, enriquecendo o prompt com contexto real do projeto:
+
+| Busca | Conteúdo coletado | Onde busca |
+|-------|-------------------|------------|
+| Documentação | README.md, DEVELOPMENT.md, CONTRIBUTING.md, ARCHITECTURE.md | raiz |
+| Diretrizes | Arquivos .md com padrões e convenções | docs/, .github/ |
+| Constantes/Domínio | Enumeradores, constantes, regras de negócio | src/constants/, src/enumerators/, src/enums/ |
+| Arquitetura/Config | package.json, tsconfig.json, .eslintrc, .babelrc | raiz |
+
+A IA agora valida o código considerando:
+- Padrões reais do projeto (documentados ou em código)
+- Constantes e enumeradores do domínio (detecta hardcoding vs uso correto)
+- Dependências disponíveis (não sugere libs ausentes no projeto)
+- Convenções de contribuição do time
+
+**Novo: Provider `claude-cli`**
+
+Permite usar o token OAuth do Claude Code CLI instalado localmente, sem necessidade de API key paga:
+
+```env
+AI_PROVIDER=claude-cli
+AI_API_KEY=   # deixar vazio
+```
+
+O token é lido automaticamente de `~/.claude/.credentials.json` e usa autenticação `Bearer` na API da Anthropic. Requer o Claude CLI autenticado (`claude`).
+
+**Correção: detecção de rate limit da Anthropic**
+
+O método `_isRateLimitError` agora reconhece o formato `type: "rate_limit_error"` da API da Anthropic, ativando o retry automático corretamente para os providers `claude` e `claude-cli`.
+
+#### 📝 Arquivos
+
+**Criados:**
+- `project-context.js` — `ProjectContextCollector`: lista diretórios via API do Bitbucket, busca arquivos relevantes, serializa contexto para o prompt
+
+**Modificados:**
+- `ai-analyzer.js`
+  - Função `readClaudeCLIToken()` lê credenciais do Claude CLI
+  - Provider `claude-cli` com autenticação Bearer OAuth
+  - Rate limit conservador (30 req/min) para o provider CLI
+  - `analyzeFile`, `analyzeFiles`, `generatePRSummary` recebem `projectContext`
+  - `buildPrompt` e `buildPRSummaryPrompt` incluem bloco de contexto do repositório
+  - Instrução 3 atualizada: valida conformidade com constantes/enumeradores do projeto
+  - Modelo padrão atualizado para `claude-sonnet-4-6`
+- `index.js`
+  - Importa e instancia `ProjectContextCollector`
+  - Coleta contexto antes da análise com IA (usando o hash do commit da PR)
+  - Passa `projectContext` para `analyzeFiles` e `generatePRSummary`
+
+#### 💡 Impacto na Qualidade da Análise
+
+**Antes:** IA via apenas diff + issues estáticas + contexto Jira
+**Depois:** IA vê diff + issues + Jira + documentação real + constantes do domínio + dependências do projeto
+
+Exemplo: se o projeto tem `src/constants/VehicleStatus.js` com `AVAILABLE = 'disponivel'`, a IA detecta quando o código usa a string `'disponivel'` diretamente em vez do enumerador.
+
+---
+
 ## [1.7.1] - 2026-05-29
 
 ### 🎨 UX: Contador Dinâmico de Rate Limiting

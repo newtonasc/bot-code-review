@@ -33,12 +33,14 @@ import CodeAnalyzer from './code-analyzer.js';
 import InteractiveCLI from './interactive-cli.js';
 import JiraClient from './jira-client.js';
 import AIAnalyzer from './ai-analyzer.js';
+import ProjectContextCollector from './project-context.js';
 
 class CodeReviewBot {
   constructor(token, workspace, repoSlug, username = null, jiraConfig = {}, aiConfig = {}) {
     this.bitbucket = new BitbucketClient(token, workspace, repoSlug, username);
     this.analyzer = new CodeAnalyzer();
     this.cli = new InteractiveCLI();
+    this.projectContext = new ProjectContextCollector(this.bitbucket);
     this.jira = new JiraClient(
       jiraConfig.cloudId,
       jiraConfig.projectKey,
@@ -133,6 +135,12 @@ class CodeReviewBot {
       let aiAnalyses = [];
       let aiSummary = null;
       if (this.ai.enabled) {
+        // Coleta contexto semântico do repositório (documentação, constantes, configuração)
+        const commitHash = pr.source?.commit?.hash;
+        if (commitHash) {
+          await this.projectContext.collect(commitHash);
+        }
+
         // Prepara dados para IA
         const filesForAI = files.map(f => ({
           filePath: f.filename,
@@ -141,11 +149,11 @@ class CodeReviewBot {
           staticIssues: issuesByFile[f.filename] || [],
         }));
 
-        // Analisa com IA
-        aiAnalyses = await this.ai.analyzeFiles(filesForAI, jiraAnalysis);
+        // Analisa com IA (passando contexto do projeto)
+        aiAnalyses = await this.ai.analyzeFiles(filesForAI, jiraAnalysis, this.projectContext);
 
-        // Gera resumo da PR
-        aiSummary = await this.ai.generatePRSummary(pr, files, report, jiraAnalysis);
+        // Gera resumo da PR (passando contexto do projeto)
+        aiSummary = await this.ai.generatePRSummary(pr, files, report, jiraAnalysis, this.projectContext);
 
         // Exibe resumo da IA
         if (aiSummary) {
@@ -518,7 +526,9 @@ Documentação completa: README.md
     apiKey: process.env.AI_API_KEY || null,
   };
 
-  if (aiConfig.apiKey) {
+  // claude-cli não precisa de API key — o AIAnalyzer lê o token do Claude CLI
+  const aiEnabled = aiConfig.apiKey || aiConfig.provider === 'claude-cli';
+  if (aiEnabled) {
     console.log(`🤖 Análise com IA habilitada (${aiConfig.provider})\n`);
   }
 

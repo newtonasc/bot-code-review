@@ -4,12 +4,48 @@
  */
 
 import axios from 'axios';
+import { readFileSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
+
+/**
+ * Lê o token OAuth do Claude CLI armazenado em ~/.claude/.credentials.json
+ * @returns {{ token: string, expiresAt: number } | null}
+ */
+function readClaudeCLIToken() {
+  try {
+    const credPath = join(homedir(), '.claude', '.credentials.json');
+    const raw = readFileSync(credPath, 'utf8');
+    const creds = JSON.parse(raw);
+    const oauth = creds?.claudeAiOauth;
+    if (!oauth?.accessToken) return null;
+    return { token: oauth.accessToken, expiresAt: oauth.expiresAt ?? 0 };
+  } catch {
+    return null;
+  }
+}
 
 export default class AIAnalyzer {
   constructor(provider = 'claude', apiKey = null) {
     this.provider = provider.toLowerCase();
     this.apiKey = apiKey;
-    this.enabled = !!apiKey;
+
+    // Para o provider claude-cli, lê o token do arquivo de credenciais
+    if (this.provider === 'claude-cli' && !this.apiKey) {
+      const cli = readClaudeCLIToken();
+      if (cli) {
+        if (cli.expiresAt && Date.now() > cli.expiresAt) {
+          console.warn('⚠️  Token do Claude CLI expirado. Execute `claude` para renovar a sessão.');
+        } else {
+          this.apiKey = cli.token;
+          this.cliTokenExpiresAt = cli.expiresAt;
+        }
+      } else {
+        console.warn('⚠️  Credenciais do Claude CLI não encontradas. Certifique-se de estar logado (`claude`).');
+      }
+    }
+
+    this.enabled = !!this.apiKey;
 
     // Controle de rate limiting
     this.requestQueue = [];
@@ -20,6 +56,7 @@ export default class AIAnalyzer {
     // Rate limits por provider (requisições por minuto)
     this.rateLimits = {
       'claude': 50,
+      'claude-cli': 30,
       'openai': 60,
       'github-models': 10,
     };
@@ -28,10 +65,20 @@ export default class AIAnalyzer {
     this.config = {
       claude: {
         baseURL: 'https://api.anthropic.com/v1/messages',
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-6',
         headers: {
           'x-api-key': this.apiKey,
-          'anthropic-version': '2024-06-01',
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+      },
+      // Autenticação via token OAuth do Claude CLI (sem API key paga)
+      'claude-cli': {
+        baseURL: 'https://api.anthropic.com/v1/messages',
+        model: 'claude-sonnet-4-6',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         },
       },
@@ -63,13 +110,13 @@ export default class AIAnalyzer {
    * @param {Object} jiraContext - Contexto da issue do Jira (opcional)
    * @returns {Promise<Object>} Análise da IA
    */
-  async analyzeFile(filePath, content, patch, staticIssues = [], jiraContext = null) {
+  async analyzeFile(filePath, content, patch, staticIssues = [], jiraContext = null, projectContext = null) {
     if (!this.enabled) {
       return null;
     }
 
     try {
-      const prompt = this.buildPrompt(filePath, content, patch, staticIssues, jiraContext);
+      const prompt = this.buildPrompt(filePath, content, patch, staticIssues, jiraContext, projectContext);
       const response = await this.callLLM(prompt);
       return this.parseResponse(response);
     } catch (error) {
@@ -98,9 +145,10 @@ export default class AIAnalyzer {
   _isRateLimitError(error) {
     if (error.response?.status !== 429) return false;
     const code = error.response?.data?.error?.code;
+    const type = error.response?.data?.error?.type;
     const message = error.response?.data?.error?.message || '';
-    // Rate limit é diferente de insufficient_quota
-    return code === 'RateLimitReached' || message.includes('Rate limit');
+    // Cobre formato Anthropic (rate_limit_error), OpenAI (RateLimitReached) e mensagens genéricas
+    return type === 'rate_limit_error' || code === 'RateLimitReached' || message.toLowerCase().includes('rate limit');
   }
 
   /**
@@ -203,7 +251,7 @@ export default class AIAnalyzer {
    * @param {Object} jiraContext - Contexto da issue do Jira (opcional)
    * @returns {Promise<Array>} Análises da IA
    */
-  async analyzeFiles(files, jiraContext = null) {
+  async analyzeFiles(files, jiraContext = null, projectContext = null) {
     if (!this.enabled || files.length === 0) {
       return [];
     }
@@ -224,7 +272,8 @@ export default class AIAnalyzer {
           file.content,
           file.patch,
           file.staticIssues,
-          jiraContext
+          jiraContext,
+          projectContext
         );
         if (analysis) {
           results.push({ filePath: file.filePath, analysis });
@@ -253,13 +302,13 @@ export default class AIAnalyzer {
    * @param {Object} jiraContext - Contexto da issue do Jira (opcional)
    * @returns {Promise<Object>} Resumo inteligente
    */
-  async generatePRSummary(prData, files, staticAnalysis, jiraContext = null) {
+  async generatePRSummary(prData, files, staticAnalysis, jiraContext = null, projectContext = null) {
     if (!this.enabled) {
       return null;
     }
 
     try {
-      const prompt = this.buildPRSummaryPrompt(prData, files, staticAnalysis, jiraContext);
+      const prompt = this.buildPRSummaryPrompt(prData, files, staticAnalysis, jiraContext, projectContext);
       const response = await this.callLLM(prompt);
       return this.parseSummaryResponse(response);
     } catch (error) {
@@ -280,10 +329,10 @@ export default class AIAnalyzer {
    * Constrói o prompt para análise de arquivo
    * @private
    */
-  buildPrompt(filePath, content, patch, staticIssues, jiraContext) {
+  buildPrompt(filePath, content, patch, staticIssues, jiraContext, projectContext = null) {
     let prompt = `Você é um especialista em code review para projetos Node.js (Express, Sequelize e similares).
 
-**Tarefa:** Analise o código modificado e forneça feedback construtivo.
+**Tarefa:** Analise o código modificado e forneça feedback construtivo, considerando o contexto real do projeto.
 
 **Arquivo:** ${filePath}
 
@@ -295,6 +344,10 @@ ${patch}
 **Issues detectadas por regras estáticas (${staticIssues.length}):**
 ${staticIssues.map((issue, i) => `${i + 1}. [${issue.severity}] ${issue.rule}: ${issue.message}`).join('\n') || 'Nenhuma'}
 `;
+
+    if (projectContext && !projectContext.isEmpty()) {
+      prompt += `\n## Contexto do Repositório\n${projectContext.formatForPrompt()}\n`;
+    }
 
     if (jiraContext && jiraContext.found) {
       prompt += `\n**Contexto da Issue (${jiraContext.key}):**
@@ -309,9 +362,9 @@ ${staticIssues.map((issue, i) => `${i + 1}. [${issue.severity}] ${issue.rule}: $
     prompt += `\n**Instruções:**
 1. Analise a qualidade do código (legibilidade, manutenibilidade, performance)
 2. Identifique problemas de segurança ou bugs potenciais
-3. Verifique se o código segue boas práticas de Node.js/Express
+3. Verifique conformidade com os padrões do projeto (documentação, constantes, enumeradores)
 4. Se houver contexto do Jira, valide alinhamento com requisitos
-5. Sugira melhorias específicas e acionáveis
+5. Sugira melhorias específicas e acionáveis baseadas nas convenções reais do projeto
 
 **Formato de resposta (JSON):**
 \`\`\`json
@@ -352,14 +405,18 @@ Responda APENAS com o JSON, sem texto adicional.`;
    * Constrói o prompt para resumo da PR
    * @private
    */
-  buildPRSummaryPrompt(prData, files, staticAnalysis, jiraContext) {
-    let prompt = `Você é um especialista em code review. Analise esta Pull Request e forneça um resumo executivo.
+  buildPRSummaryPrompt(prData, files, staticAnalysis, jiraContext, projectContext = null) {
+    let prompt = `Você é um especialista em code review. Analise esta Pull Request e forneça um resumo executivo contextualizado.
 
 **PR:** #${prData.id} - ${prData.title}
 **Autor:** ${prData.author.display_name}
 **Arquivos modificados:** ${files.length}
 **Issues estáticas encontradas:** ${staticAnalysis.totalIssues} (${staticAnalysis.issuesBySeverity.error} erros, ${staticAnalysis.issuesBySeverity.warning} avisos)
 `;
+
+    if (projectContext && !projectContext.isEmpty()) {
+      prompt += `\n## Contexto do Repositório\n${projectContext.formatForPrompt()}\n`;
+    }
 
     if (jiraContext && jiraContext.found) {
       prompt += `\n**Issue relacionada:** ${jiraContext.key} - ${jiraContext.summary}
@@ -373,10 +430,11 @@ Responda APENAS com o JSON, sem texto adicional.`;
 ${files.map(f => `- ${f.filename} (+${f.additions || 0}/-${f.deletions || 0})`).join('\n')}
 
 **Análise:**
-1. Avalie a qualidade geral da PR (scope, coesão, clareza)
+1. Avalie a qualidade geral da PR (scope, coesão, clareza) considerando os padrões do projeto
 2. Identifique riscos ou problemas críticos
-3. Valide completude em relação aos requisitos (se houver issue)
-4. Recomende: APPROVE, REQUEST_CHANGES ou COMMENT
+3. Valide uso correto das constantes/enumeradores do domínio (se disponíveis no contexto)
+4. Valide completude em relação aos requisitos (se houver issue)
+5. Recomende: APPROVE, REQUEST_CHANGES ou COMMENT
 
 **Formato de resposta (JSON):**
 \`\`\`json
@@ -415,7 +473,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
   async callLLM(prompt, retryCount = 0, maxRetries = 3) {
     const cfg = this.config[this.provider];
     if (!cfg) {
-      throw new Error(`Provider não suportado: ${this.provider}. Use 'claude', 'openai' ou 'github-models'.`);
+      throw new Error(`Provider não suportado: ${this.provider}. Use 'claude', 'claude-cli', 'openai' ou 'github-models'.`);
     }
 
     // Aguarda rate limit antes de fazer a requisição
@@ -423,7 +481,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
 
     let requestBody;
 
-    if (this.provider === 'claude') {
+    if (this.provider === 'claude' || this.provider === 'claude-cli') {
       requestBody = {
         model: cfg.model,
         max_tokens: 4096,
@@ -449,7 +507,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
       });
 
       // Extrai conteúdo da resposta
-      if (this.provider === 'claude') {
+      if (this.provider === 'claude' || this.provider === 'claude-cli') {
         return response.data.content[0].text;
       } else if (this.provider === 'openai' || this.provider === 'github-models') {
         return response.data.choices[0].message.content;
