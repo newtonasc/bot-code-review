@@ -301,12 +301,59 @@ O bot exibe:
 
 ```bash
 ⚠️  Erro na análise com IA: Rate limit exceeded
+⏳ Rate limit atingido. Tentativa 1/3. Aguardando 17s...
+⏳ Aguardando rate limit: 16s restantes...  # Contador em tempo real
+⏳ Aguardando rate limit: 15s restantes...
+⏳ Aguardando rate limit: 14s restantes...
+...
 ```
 
-**Solução:**
-1. Aguarde alguns minutos
+**O que acontece:**
+- O bot **automaticamente detecta** erros 429 (Rate Limit)
+- **Extrai o tempo de espera** sugerido pela API (ex: 17 segundos)
+- **Mostra contador dinâmico** atualizando em tempo real a cada segundo
+- **Tenta novamente** até 3 vezes com backoff exponencial
+- **Controla a taxa** de requisições para evitar atingir o limite
+
+**Rate limits por provider:**
+- GitHub Models: 10 requisições/minuto (~6.5s entre requisições)
+- Claude: 50 requisições/minuto
+- OpenAI: 60 requisições/minuto
+
+**Comportamento esperado:**
+```bash
+🤖 Analisando 15 arquivo(s) com IA (github-models)...
+   Rate limit: 10 requisições/minuto
+   [1/15] Analisando src/controllers/UserController.js...
+   ✅ [1/15] Análise completa
+   [2/15] Analisando src/services/UserService.js...
+   ✅ [2/15] Análise completa
+   ...
+   [10/15] Analisando src/models/User.js...
+   
+   ⏳ Rate limit atingido (10/10). Aguardando 47s...
+   ⏳ Aguardando rate limit: 46s restantes...
+   ⏳ Aguardando rate limit: 45s restantes...
+   ...
+   ⏳ Aguardando rate limit: 1s restantes...
+   
+   [11/15] Analisando src/repositories/UserRepository.js...
+   ✅ [11/15] Análise completa
+   ...
+✅ Análise com IA concluída: 15/15 arquivo(s)
+```
+
+**Recursos do contador:**
+- ⏱️ Atualização em tempo real (a cada segundo)
+- 🎯 Mostra tempo restante preciso
+- 🧹 Limpeza automática da linha após conclusão
+- 👁️ Feedback visual contínuo para o usuário
+
+**Solução manual (apenas se necessário):**
+1. Aguarde alguns minutos para o limite resetar
 2. Aumente o tier da sua conta na plataforma
-3. Use modo de análise estática até o limite resetar
+3. Use modo de análise estática (`--dry-run` sem IA)
+4. Reduza número de arquivos analisados por PR
 
 ### IA não está sendo usada
 
@@ -346,7 +393,37 @@ A IA é mais eficaz quando tem contexto do Jira:
 node index.js 1912
 ```
 
-### 3. Revise Sugestões da IA
+### 3. Otimize para Rate Limits
+
+O bot implementa controle automático de rate limiting, mas você pode otimizar:
+
+**GitHub Models (10 req/min):**
+- ✅ PRs com até 10 arquivos: ~1 minuto
+- ⚠️ PRs com 20 arquivos: ~2 minutos (aguarda automaticamente)
+- 💡 Para PRs muito grandes, considere analisar apenas arquivos críticos
+
+**Tempo estimado por arquivo:**
+- GitHub Models: ~6-7 segundos/arquivo
+- Claude/OpenAI: ~2-3 segundos/arquivo
+
+**Demonstração do contador:**
+```bash
+# Execute o script de teste para ver o contador em ação
+node test-rate-limit-counter.js
+```
+
+**Exemplo:**
+```bash
+# PR com 15 arquivos usando GitHub Models
+🤖 Analisando 15 arquivo(s) com IA (github-models)...
+   Rate limit: 10 requisições/minuto
+   [1-10] ~1 minuto (primeira leva)
+   ⏳ Aguardando 47s... (rate limit)
+   [11-15] ~30 segundos (segunda leva)
+✅ Total: ~2:17 minutos
+```
+
+### 4. Revise Sugestões da IA
 
 A IA pode ocasionalmente:
 - Fazer sugestões genéricas demais

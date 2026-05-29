@@ -252,6 +252,14 @@ Se você quiser cache de decisões:
 
 ## 🐛 Troubleshooting
 
+### Erro 404: "Endpoint /diffstat da PR não disponível"
+
+**Causa:** Limitações conhecidas da API do Bitbucket Cloud
+
+**Solução:** Isso é **normal e esperado**! O bot automaticamente usa métodos alternativos.
+
+📖 **Leia mais**: [BITBUCKET_API_ISSUES.md](BITBUCKET_API_ISSUES.md) - Explicação completa
+
 ### Erro: "Unauthorized"
 
 **Causa:** Credenciais inválidas ou App Password sem permissões

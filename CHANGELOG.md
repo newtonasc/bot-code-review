@@ -1,5 +1,83 @@
 # Changelog - Code Review Bot
 
+## [1.7.1] - 2026-05-29
+
+### 🎨 UX: Contador Dinâmico de Rate Limiting
+
+**Melhorias Visuais:**
+- ✅ Contador dinâmico em tempo real durante espera de rate limit
+- ✅ Atualização a cada segundo mostrando tempo restante
+- ✅ Feedback visual aprimorado: "⏳ Aguardando rate limit: 53s restantes..."
+- ✅ Limpeza automática da linha após conclusão da espera
+
+**Exemplo de saída:**
+```bash
+[10/15] Analisando arquivo.js...
+✅ [10/15] Análise completa
+
+⏳ Rate limit atingido (10/10). Aguardando 55s...
+⏳ Aguardando rate limit: 54s restantes...  # Atualiza em tempo real
+⏳ Aguardando rate limit: 53s restantes...
+⏳ Aguardando rate limit: 52s restantes...
+...
+⏳ Aguardando rate limit: 1s restantes...
+
+[11/15] Analisando próximo arquivo...
+```
+
+**Arquivo modificado:**
+- `ai-analyzer.js` - Método `_sleep()` agora suporta contador dinâmico
+
+**Script de teste:**
+- `test-rate-limit-counter.js` - Demonstração do contador funcionando
+
+## [1.7.0] - 2026-05-29
+
+### 🚀 Melhorias de Rate Limiting e Retry
+
+**Sistema Inteligente de Rate Limiting:**
+- ✅ Controle automático de taxa de requisições por provider
+- ✅ Rate limits configurados: GitHub Models (10/min), Claude (50/min), OpenAI (60/min)
+- ✅ Delay automático entre requisições para evitar burst
+- ✅ Contador de requisições com janela deslizante de 60 segundos
+
+**Sistema de Retry com Backoff:**
+- ✅ Retry automático em erros 429 (Rate Limit Reached)
+- ✅ Extração inteligente do tempo de espera do erro da API
+- ✅ Backoff exponencial como fallback (1s, 2s, 4s, max 30s)
+- ✅ Até 3 tentativas automáticas antes de falhar
+- ✅ Diferencia entre rate limit (retry) e quota excedida (falha imediata)
+
+**Feedback Aprimorado:**
+- ✅ Progresso em tempo real ([1/15] Analisando arquivo.js...)
+- ✅ Mensagens claras de aguardo (⏳ Aguardando 17s...)
+- ✅ Indicador de rate limit por provider
+- ✅ Contador de sucesso/falha ao final (15/15 arquivos)
+
+**Melhorias no Bitbucket Client:**
+- ✅ Cache de endpoints indisponíveis (evita 404 repetidos)
+- ✅ Sistema de fallback com 3 métodos para buscar arquivos
+- ✅ Mensagens mais claras sobre qual método funcionou
+- ✅ Documentação completa em [BITBUCKET_API_ISSUES.md](BITBUCKET_API_ISSUES.md)
+
+**Exemplo de saída:**
+```bash
+🤖 Analisando 15 arquivo(s) com IA (github-models)...
+   Rate limit: 10 requisições/minuto
+   [1/15] Analisando src/UserController.js...
+   ✅ [1/15] Análise completa
+   ...
+   [10/15] Analisando src/UserService.js...
+   ⏳ Rate limit atingido (10/10). Aguardando 47s...
+   ✅ [10/15] Análise completa
+   ...
+✅ Análise com IA concluída: 15/15 arquivo(s)
+```
+
+**Documentação Atualizada:**
+- [AI_INTEGRATION.md](AI_INTEGRATION.md) - Nova seção sobre rate limiting
+- [BITBUCKET_API_ISSUES.md](BITBUCKET_API_ISSUES.md) - Novo guia sobre problemas conhecidos
+
 ## [1.6.0] - 2026-05-27
 
 ### 🤖 NEW: Integração com IA (Claude/GPT)

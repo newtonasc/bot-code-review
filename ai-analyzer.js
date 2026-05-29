@@ -11,6 +11,19 @@ export default class AIAnalyzer {
     this.apiKey = apiKey;
     this.enabled = !!apiKey;
 
+    // Controle de rate limiting
+    this.requestQueue = [];
+    this.lastRequestTime = 0;
+    this.requestCount = 0;
+    this.rateLimitWindow = 60000; // 60 segundos
+
+    // Rate limits por provider (requisições por minuto)
+    this.rateLimits = {
+      'claude': 50,
+      'openai': 60,
+      'github-models': 10,
+    };
+
     // Configurações por provider
     this.config = {
       claude: {
@@ -79,6 +92,112 @@ export default class AIAnalyzer {
   }
 
   /**
+   * Verifica se é um erro de rate limit (não quota)
+   * @private
+   */
+  _isRateLimitError(error) {
+    if (error.response?.status !== 429) return false;
+    const code = error.response?.data?.error?.code;
+    const message = error.response?.data?.error?.message || '';
+    // Rate limit é diferente de insufficient_quota
+    return code === 'RateLimitReached' || message.includes('Rate limit');
+  }
+
+  /**
+   * Extrai o tempo de espera sugerido do erro 429
+   * @private
+   */
+  _getRetryAfter(error) {
+    // Tenta header Retry-After
+    const retryAfter = error.response?.headers['retry-after'];
+    if (retryAfter) {
+      return parseInt(retryAfter) * 1000; // Converte para ms
+    }
+
+    // Tenta extrair da mensagem de erro
+    const message = error.response?.data?.error?.message || '';
+    const match = message.match(/wait (\d+) seconds?/i);
+    if (match) {
+      return parseInt(match[1]) * 1000; // Converte para ms
+    }
+
+    // Fallback: backoff exponencial baseado na tentativa
+    return null;
+  }
+
+  /**
+   * Aguarda antes da próxima requisição (rate limiting)
+   * @private
+   */
+  async _waitForRateLimit() {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+
+    // Limpa contador se passou a janela de tempo
+    if (timeSinceLastRequest > this.rateLimitWindow) {
+      this.requestCount = 0;
+    }
+
+    // Se atingiu o limite, aguarda
+    const limit = this.rateLimits[this.provider] || 50;
+    if (this.requestCount >= limit) {
+      const waitTime = this.rateLimitWindow - timeSinceLastRequest;
+      if (waitTime > 0) {
+        const waitSeconds = Math.ceil(waitTime / 1000);
+        process.stdout.write(`\n   ⏳ Rate limit atingido (${this.requestCount}/${limit}). Aguardando ${waitSeconds}s...\n`);
+        await this._sleep(waitTime, true);
+        this.requestCount = 0;
+      }
+    }
+
+    // Delay mínimo entre requisições (evita burst)
+    const minDelay = this.provider === 'github-models' ? 6500 : 1000; // ~9 req/min para GitHub
+    if (timeSinceLastRequest < minDelay) {
+      await this._sleep(minDelay - timeSinceLastRequest);
+    }
+
+    this.requestCount++;
+    this.lastRequestTime = Date.now();
+  }
+
+  /**
+   * Sleep helper com contador dinâmico
+   * @private
+   */
+  async _sleep(ms, showProgress = false) {
+    if (!showProgress || ms < 1000) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    const startTime = Date.now();
+    const endTime = startTime + ms;
+
+    return new Promise((resolve) => {
+      const updateInterval = setInterval(() => {
+        const now = Date.now();
+        const remaining = Math.ceil((endTime - now) / 1000);
+
+        if (remaining <= 0) {
+          clearInterval(updateInterval);
+          // Limpa a linha e move o cursor para o início
+          process.stdout.write('\r\x1b[K');
+          resolve();
+        } else {
+          // Atualiza na mesma linha
+          process.stdout.write(`\r   ⏳ Aguardando rate limit: ${remaining}s restantes...`);
+        }
+      }, 1000);
+
+      // Cleanup final após o tempo total
+      setTimeout(() => {
+        clearInterval(updateInterval);
+        process.stdout.write('\r\x1b[K');
+        resolve();
+      }, ms);
+    });
+  }
+
+  /**
    * Analisa múltiplos arquivos em lote
    * @param {Array} files - Array de objetos {filePath, content, patch, staticIssues}
    * @param {Object} jiraContext - Contexto da issue do Jira (opcional)
@@ -89,11 +208,17 @@ export default class AIAnalyzer {
       return [];
     }
 
+    const rateLimit = this.rateLimits[this.provider] || 50;
     console.log(`\n🤖 Analisando ${files.length} arquivo(s) com IA (${this.provider})...`);
+    console.log(`   Rate limit: ${rateLimit} requisições/minuto`);
 
     const results = [];
+    let fileIndex = 0;
+
     for (const file of files) {
+      fileIndex++;
       try {
+        console.log(`   [${fileIndex}/${files.length}] Analisando ${file.filePath}...`);
         const analysis = await this.analyzeFile(
           file.filePath,
           file.content,
@@ -103,6 +228,7 @@ export default class AIAnalyzer {
         );
         if (analysis) {
           results.push({ filePath: file.filePath, analysis });
+          console.log(`   ✅ [${fileIndex}/${files.length}] Análise completa`);
         }
       } catch (error) {
         if (this._isQuotaError(error)) {
@@ -111,11 +237,11 @@ export default class AIAnalyzer {
           this.enabled = false;
           break;
         }
-        console.warn(`⚠️  Erro na análise com IA (${file.filePath}): ${error.message}`);
+        console.warn(`   ⚠️  [${fileIndex}/${files.length}] Erro na análise: ${error.message}`);
       }
     }
 
-    console.log(`✅ Análise com IA concluída: ${results.length} arquivo(s)`);
+    console.log(`✅ Análise com IA concluída: ${results.length}/${files.length} arquivo(s)`);
     return results;
   }
 
@@ -283,14 +409,17 @@ Responda APENAS com o JSON, sem texto adicional.`;
   }
 
   /**
-   * Chama o LLM (Claude ou OpenAI)
+   * Chama o LLM (Claude ou OpenAI) com retry e rate limiting
    * @private
    */
-  async callLLM(prompt) {
+  async callLLM(prompt, retryCount = 0, maxRetries = 3) {
     const cfg = this.config[this.provider];
     if (!cfg) {
       throw new Error(`Provider não suportado: ${this.provider}. Use 'claude', 'openai' ou 'github-models'.`);
     }
+
+    // Aguarda rate limit antes de fazer a requisição
+    await this._waitForRateLimit();
 
     let requestBody;
 
@@ -313,16 +442,44 @@ Responda APENAS com o JSON, sem texto adicional.`;
       };
     }
 
-    const response = await axios.post(cfg.baseURL, requestBody, {
-      headers: cfg.headers,
-      timeout: 60000,
-    });
+    try {
+      const response = await axios.post(cfg.baseURL, requestBody, {
+        headers: cfg.headers,
+        timeout: 60000,
+      });
 
-    // Extrai conteúdo da resposta
-    if (this.provider === 'claude') {
-      return response.data.content[0].text;
-    } else if (this.provider === 'openai' || this.provider === 'github-models') {
-      return response.data.choices[0].message.content;
+      // Extrai conteúdo da resposta
+      if (this.provider === 'claude') {
+        return response.data.content[0].text;
+      } else if (this.provider === 'openai' || this.provider === 'github-models') {
+        return response.data.choices[0].message.content;
+      }
+    } catch (error) {
+      // Se for erro de quota, propaga sem retry
+      if (this._isQuotaError(error)) {
+        throw error;
+      }
+
+      // Se for rate limit e ainda tem retries, tenta novamente
+      if (this._isRateLimitError(error) && retryCount < maxRetries) {
+        // Tenta extrair tempo de espera do erro
+        let waitTime = this._getRetryAfter(error);
+
+        // Se não conseguiu extrair, usa backoff exponencial
+        if (!waitTime) {
+          waitTime = Math.min(1000 * Math.pow(2, retryCount), 30000); // Max 30s
+        }
+
+        const waitSeconds = Math.ceil(waitTime / 1000);
+        process.stdout.write(`\n   ⏳ Rate limit atingido. Tentativa ${retryCount + 1}/${maxRetries}. Aguardando ${waitSeconds}s...\n`);
+        await this._sleep(waitTime, true);
+
+        // Retry recursivo
+        return this.callLLM(prompt, retryCount + 1, maxRetries);
+      }
+
+      // Qualquer outro erro ou sem mais retries, propaga
+      throw error;
     }
   }
 

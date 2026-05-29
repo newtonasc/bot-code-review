@@ -16,6 +16,9 @@ export default class BitbucketClient {
     this.username = username;
     this.baseUrl = 'https://api.bitbucket.org/2.0';
 
+    // Cache para endpoints que não funcionam (evita tentativas repetidas)
+    this.unavailableEndpoints = new Set();
+
     // Detecta o tipo de autenticação baseado no token
     // Tokens Atlassian (ATATT*) requerem Basic Auth
     const isAtlassianToken = token && token.startsWith('ATATT');
@@ -107,9 +110,11 @@ export default class BitbucketClient {
 
       // Busca diffstat comparando commits source e destination da PR
       let diffstat = [];
-      console.log(`🔍 Buscando diffstat via comparação de commits...`);
+      const method1Key = 'diffstat-compare';
 
-      if (sourceHash && destHash) {
+      // Método 1: Comparação de commits
+      if (sourceHash && destHash && !this.unavailableEndpoints.has(method1Key)) {
+        console.log(`🔍 Método 1: Comparação de commits (${destHash.substring(0, 7)}..${sourceHash.substring(0, 7)})...`);
         try {
           const allFiles = new Map();
           let nextUrl = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/diffstat/${destHash}..${sourceHash}`;
@@ -127,15 +132,23 @@ export default class BitbucketClient {
           }
 
           diffstat = Array.from(allFiles.values());
-          console.log(`✅ ${diffstat.length} arquivo(s) modificado(s) encontrado(s)`);
+          console.log(`✅ Método 1 bem-sucedido: ${diffstat.length} arquivo(s) encontrado(s)`);
         } catch (diffError) {
-          console.warn(`⚠️  Erro ao buscar diffstat por commits: ${diffError.response?.status} ${diffError.message}`);
+          if (diffError.response?.status === 404) {
+            this.unavailableEndpoints.add(method1Key);
+            console.log(`ℹ️  Método 1 não disponível neste repositório (será ignorado nas próximas execuções)`);
+          } else {
+            console.log(`ℹ️  Método 1 falhou (${diffError.response?.status}), tentando próximo método...`);
+          }
         }
+      } else if (this.unavailableEndpoints.has(method1Key)) {
+        console.log(`⏭️  Método 1 pulado (não disponível neste repositório)`);
       }
 
-      // Fallback: tenta o endpoint de diffstat da PR
-      if (diffstat.length === 0) {
-        console.log(`🔍 Tentando endpoint /diffstat da PR...`);
+      // Método 2: Endpoint direto da PR
+      const method2Key = 'pr-diffstat';
+      if (diffstat.length === 0 && !this.unavailableEndpoints.has(method2Key)) {
+        console.log(`🔍 Método 2: Endpoint direto da PR #${prNumber}...`);
         try {
           const allFiles = new Map();
           let nextUrl = `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/diffstat`;
@@ -153,22 +166,29 @@ export default class BitbucketClient {
           }
 
           diffstat = Array.from(allFiles.values());
-          console.log(`✅ ${diffstat.length} arquivo(s) modificado(s) no diffstat da PR`);
+          console.log(`✅ Método 2 bem-sucedido: ${diffstat.length} arquivo(s) encontrado(s)`);
         } catch (prDiffError) {
-          console.warn(`⚠️  Endpoint /diffstat da PR não disponível: ${prDiffError.response?.status} ${prDiffError.message}`);
+          if (prDiffError.response?.status === 404) {
+            this.unavailableEndpoints.add(method2Key);
+            console.log(`ℹ️  Método 2 não disponível neste repositório (será ignorado nas próximas execuções)`);
+          } else {
+            console.log(`ℹ️  Método 2 falhou (${prDiffError.response?.status}), tentando próximo método...`);
+          }
         }
+      } else if (diffstat.length === 0 && this.unavailableEndpoints.has(method2Key)) {
+        console.log(`⏭️  Método 2 pulado (não disponível neste repositório)`);
       }
 
       // Último fallback: busca commits e diffstat por commit
       if (diffstat.length === 0) {
-        console.log(`🔍 Buscando commits da PR como fallback...`);
+        console.log(`🔍 Método 3: Buscando arquivos através dos commits da PR...`);
         try {
           const commitsResponse = await axios.get(
             `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/commits`,
             this._getAxiosConfig()
           );
           const commits = commitsResponse.data.values || [];
-          console.log(`✅ ${commits.length} commit(s) encontrado(s)`);
+          console.log(`   ${commits.length} commit(s) encontrado(s) na PR`);
 
           const allFiles = new Map();
           for (const commit of commits.slice(0, 10)) {
@@ -185,14 +205,14 @@ export default class BitbucketClient {
                 }
               });
             } catch (commitDiffError) {
-              console.warn(`⚠️  Erro ao buscar diff do commit ${commit.hash.substring(0, 7)}`);
+              // Silenciosamente ignora erros de commits individuais
             }
           }
 
           diffstat = Array.from(allFiles.values());
-          console.log(`✅ ${diffstat.length} arquivo(s) únicos encontrados nos commits`);
+          console.log(`✅ Método 3 bem-sucedido: ${diffstat.length} arquivo(s) únicos encontrados`);
         } catch (commitsError) {
-          console.warn(`⚠️  Não foi possível buscar commits: ${commitsError.message}`);
+          console.log(`ℹ️  Método 3 não disponível: ${commitsError.message}`);
         }
       }
 

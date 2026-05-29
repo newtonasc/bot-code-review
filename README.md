@@ -296,6 +296,7 @@ node index.js <pr-number> [options]
 - **[QUICK_START.md](QUICK_START.md)** - Comece em 5 minutos
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Arquitetura e detalhes técnicos
 - **[BITBUCKET.md](BITBUCKET.md)** - Integração com Bitbucket
+- **[BITBUCKET_API_ISSUES.md](BITBUCKET_API_ISSUES.md)** - Problemas conhecidos da API Bitbucket
 - **[JIRA_INTEGRATION.md](JIRA_INTEGRATION.md)** - Integração com Jira
 - **[AI_INTEGRATION.md](AI_INTEGRATION.md)** - Análise com IA (Claude/GPT)
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Como contribuir
