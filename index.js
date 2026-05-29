@@ -35,6 +35,15 @@ import JiraClient from './jira-client.js';
 import AIAnalyzer from './ai-analyzer.js';
 import ProjectContextCollector from './project-context.js';
 
+// Ordem de risco crescente para comparação de threshold
+const RISK_ORDER = { low: 0, medium: 1, high: 2 };
+
+function isRiskWithinThreshold(riskLevel, maxRisk) {
+  const level = RISK_ORDER[riskLevel?.toLowerCase()] ?? Infinity;
+  const max   = RISK_ORDER[maxRisk?.toLowerCase()] ?? -1;
+  return level <= max;
+}
+
 class CodeReviewBot {
   constructor(token, workspace, repoSlug, username = null, jiraConfig = {}, aiConfig = {}) {
     this.bitbucket = new BitbucketClient(token, workspace, repoSlug, username);
@@ -182,13 +191,7 @@ class CodeReviewBot {
         this.cli.displayCompliance(compliance);
       }
 
-      // Se não houver issues, finaliza
-      if (report.totalIssues === 0) {
-        console.log('✨ Nada a reportar. O código está seguindo os padrões!\n');
-        return;
-      }
-
-      // Se modo não-interativo, apenas exibe relatório
+      // Se modo dry-run, apenas exibe relatório
       if (options.dryRun) {
         console.log('ℹ️  Modo dry-run: review não será criado\n');
         return;
@@ -202,6 +205,32 @@ class CodeReviewBot {
         const aiComments = this.ai.formatAIComments(aiAnalyses);
         comments = [...comments, ...aiComments];
         console.log(`🤖 +${aiComments.length} sugestão(ões) da IA adicionada(s)\n`);
+      }
+
+      // Aprovação automática
+      if (options.autoApprove && aiSummary) {
+        const riskLevel = aiSummary.risks?.level;
+        if (isRiskWithinThreshold(riskLevel, options.autoApproveMaxRisk)) {
+          console.log(`🤖 Auto-aprovação: risco "${riskLevel}" dentro do limite configurado ("${options.autoApproveMaxRisk}")\n`);
+          const review = await this.createReview(prNumber, 'APPROVE', [], report, jiraAnalysis);
+          this.cli.displaySuccess(review.html_url);
+          return;
+        }
+        console.log(`⚠️  Auto-aprovação ignorada: risco "${riskLevel}" excede o limite "${options.autoApproveMaxRisk}"\n`);
+      }
+
+      // Request changes automático
+      if (options.autoRequestChanges && aiSummary?.recommendation === 'REQUEST_CHANGES') {
+        console.log(`🤖 Auto-request-changes: IA recomenda mudanças (${comments.length} comentário(s))\n`);
+        const review = await this.createReview(prNumber, 'REQUEST_CHANGES', comments, report, jiraAnalysis);
+        this.cli.displaySuccess(review.html_url);
+        return;
+      }
+
+      // Se não houver issues, finaliza (apenas no fluxo interativo)
+      if (report.totalIssues === 0) {
+        console.log('✨ Nada a reportar. O código está seguindo os padrões!\n');
+        return;
       }
 
       // Seleção interativa de issues
@@ -550,10 +579,25 @@ Documentação completa: README.md
     process.exit(1);
   }
 
+  // Configuração de automação de review
+  const autoApprove         = process.env.AUTO_APPROVE_ENABLED === 'true';
+  const autoApproveMaxRisk  = (process.env.AUTO_APPROVE_MAX_RISK || 'low').toLowerCase();
+  const autoRequestChanges  = process.env.AUTO_REQUEST_CHANGES_ENABLED === 'true';
+
+  if (autoApprove) {
+    console.log(`🤖 Auto-aprovação habilitada (risco máximo: "${autoApproveMaxRisk}")\n`);
+  }
+  if (autoRequestChanges) {
+    console.log(`🤖 Auto-request-changes habilitado\n`);
+  }
+
   // Opções
   const options = {
     dryRun: args.includes('--dry-run'),
-    jiraIssue: null, // Pode ser fornecido via --jira-issue-data no futuro
+    jiraIssue: null,
+    autoApprove,
+    autoApproveMaxRisk,
+    autoRequestChanges,
   };
 
   // Executa bot
