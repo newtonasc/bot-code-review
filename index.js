@@ -216,23 +216,22 @@ class CodeReviewBot {
         this.cli.displayCompliance(compliance);
       }
 
+      // Formata comentários para Bitbucket
+      const staticComments = analyzer.formatForBitbucket(issuesByFile);
+      let aiComments = [];
+
+      if (aiAnalyses.length > 0) {
+        aiComments = this.ai.formatAIComments(aiAnalyses);
+        this.cli.displayAISuggestions(aiComments);
+      }
+
+      let comments = [...staticComments, ...aiComments];
+
       // Se modo dry-run, apenas exibe relatório
       if (options.dryRun) {
         console.log('ℹ️  Modo dry-run: review não será criado\n');
         return;
       }
-
-      // Formata comentários para Bitbucket
-      const staticComments = analyzer.formatForBitbucket(issuesByFile);
-      let aiComments = [];
-
-      // Adiciona comentários da IA (se houver)
-      if (aiAnalyses.length > 0) {
-        aiComments = this.ai.formatAIComments(aiAnalyses);
-        console.log(`🤖 +${aiComments.length} sugestão(ões) da IA adicionada(s)\n`);
-      }
-
-      let comments = [...staticComments, ...aiComments];
 
       // Aprovação automática
       if (options.autoApprove && aiSummary) {

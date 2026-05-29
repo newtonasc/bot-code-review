@@ -93,6 +93,46 @@ export default class InteractiveCLI {
   }
 
   /**
+   * Exibe sugestões inline geradas pela IA, agrupadas por arquivo.
+   * @param {Array} aiComments - Comentários formatados por formatAIComments
+   */
+  displayAISuggestions(aiComments) {
+    if (!aiComments || aiComments.length === 0) return;
+
+    console.log('\n' + '='.repeat(80));
+    console.log('🤖 SUGESTÕES DA IA POR ARQUIVO');
+    console.log('='.repeat(80) + '\n');
+
+    // Agrupa por arquivo
+    const byFile = {};
+    aiComments.forEach(c => {
+      if (!byFile[c.file]) byFile[c.file] = [];
+      byFile[c.file].push(c);
+    });
+
+    Object.keys(byFile).forEach((file, fileIndex) => {
+      const fileComments = byFile[file];
+      console.log(`\n📄 ${file}`);
+      console.log(`   ${fileComments.length} sugestão(ões)\n`);
+
+      fileComments.forEach((comment, i) => {
+        const emoji = comment.severity === 'error' ? '🚨' :
+          comment.severity === 'warning' ? '⚠️' : '💡';
+        // Extrai a primeira linha de conteúdo real (pula o cabeçalho "🤖 **AI Review**")
+        const lines = comment.body.split('\n').map(l => l.trim()).filter(Boolean);
+        const firstContent = lines.find(l => !l.startsWith('🤖') && !l.startsWith('**AI')) || lines[0] || '';
+        console.log(`   ${emoji} [${fileIndex + 1}.${i + 1}] ${firstContent}`);
+        if (comment.line) {
+          console.log(`      📍 Linha: ${comment.line}`);
+        }
+        console.log('');
+      });
+    });
+
+    console.log('-'.repeat(80) + '\n');
+  }
+
+  /**
    * Exibe análise de conformidade com a issue
    * @param {Object} compliance - Análise de conformidade
    */
