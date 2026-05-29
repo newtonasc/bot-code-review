@@ -1,5 +1,91 @@
 # Changelog - Code Review Bot
 
+## [1.11.0] - 2026-05-29
+
+### ✅ Aprovação Direta e Comentário Automático no Jira
+
+#### Nova opção de review: APPROVE direto
+
+O menu de tipo de review ganhou uma quarta opção:
+
+```
+  [1] REQUEST_CHANGES       — Solicitar mudanças
+  [2] COMMENT               — Apenas comentar
+  [3] APPROVE_WITH_COMMENTS — Aprovar com comentários (comportamento anterior do [3])
+  [4] APPROVE               — Aprovar sem comentários de issues
+```
+
+**`[4] APPROVE`** (novo):
+- Pula a etapa de seleção de issues
+- Posta apenas o resumo da análise como corpo do review no Bitbucket
+- Nenhum comentário inline é criado
+- Jira sempre recebe `✅ PR aprovado` independente de issues encontradas na análise
+
+**`[3] APPROVE_WITH_COMMENTS`** (antes era `[3] APPROVE`):
+- Mantém o fluxo completo: seleção de issues → comentários inline → corpo do review
+- Jira recebe `⚠️ PR aprovado com comentário(s)` quando há issues; `✅ PR aprovado` quando não há
+
+O tipo de review agora é perguntado **antes** da seleção de issues, eliminando a seleção desnecessária para aprovações diretas.
+
+#### Comentário automático no Jira após confirmação do review
+
+Ao confirmar um review, o bot posta automaticamente um comentário na issue do Jira vinculada à PR:
+
+| Tipo | Ícone | Mensagem no Jira |
+|------|-------|-----------------|
+| `REQUEST_CHANGES` | 🚨 | Alterações solicitadas na PR |
+| `COMMENT` | ℹ️ | Adicionado comentário(s) na PR |
+| `APPROVE` | ✅ | PR aprovado |
+| `APPROVE_WITH_COMMENTS` sem issues | ✅ | PR aprovado |
+| `APPROVE_WITH_COMMENTS` com issues | ⚠️ | PR aprovado com comentário(s) |
+
+O comentário inclui link e título da PR, resumo de findings (erros, avisos, sugestões IA) e assinatura do bot com timestamp. Só é postado quando há issue Jira detectada no título/descrição da PR.
+
+#### Arquivos modificados
+
+- `interactive-cli.js`: `selectReviewType` com 4 opções; `confirmReview` exibe "aprovação direta" para `APPROVE`
+- `index.js`: `selectReviewType` movido para antes de `selectIssues`; `APPROVE` pula seleção de issues; `createReview` zera comentários para `APPROVE`; chama `addReviewComment` após criar o review
+- `jira-client.js`: adiciona `addReviewComment`, `_reviewCommentMeta`, `_getBaseUrl`, `_getAxiosConfig`
+
+---
+
+## [1.10.2] - 2026-05-29
+
+### 🔧 Severidade da IA e Seleção de Issues
+
+#### Normalização de severidade da IA
+
+O prompt não definia critérios de severidade, permitindo que a IA retornasse valores como `high`, `medium`, `low` que caíam silenciosamente em `info`.
+
+- Prompt agora define explicitamente os três níveis com critérios objetivos:
+  - `error` — bug confirmado, vulnerabilidade, quebra de contrato
+  - `warning` — padrão violado, risco potencial, má prática
+  - `info` — sugestão de melhoria opcional
+- `_normalizeSeverity` mapeia variantes (`critical`/`high` → `error`, `warn`/`medium` → `warning`) ao mesmo conjunto da análise estática
+
+#### Correções na seleção de issues
+
+O menu de seleção agora exibe contagens por categoria e origem:
+
+```
+  [a] Selecionar todas             (28 total)
+  [e] Apenas erros                 (1 estático + 2 IA)
+  [w] Apenas avisos                (6 estáticos + 8 IA)
+  [i] Apenas sugestões (info)      (11 IA)   ← aparece quando há itens info
+  [n] Nenhuma (cancelar)
+  [c] Seleção customizada (por número)
+```
+
+- Nova opção `[i]` para sugestões de nível `info` da IA (antes acessíveis apenas via `[a]` ou `[c]`)
+- Seleção customizada `[c]` exibe corretamente comentários da IA: usa `[IA]` no lugar de `ruleId` (que era `undefined`) e extrai a primeira linha real do conteúdo
+
+#### Arquivos modificados
+
+- `ai-analyzer.js`: adiciona `_normalizeSeverity`; define critérios de severidade no prompt
+- `interactive-cli.js`: `selectIssues` com contagens e opção `[i]`; `customSelection` corrigida para IA
+
+---
+
 ## [1.10.1] - 2026-05-29
 
 ### 🔍 Transparência na Confirmação do Review
