@@ -223,14 +223,16 @@ class CodeReviewBot {
       }
 
       // Formata comentários para Bitbucket
-      let comments = analyzer.formatForBitbucket(issuesByFile);
+      const staticComments = analyzer.formatForBitbucket(issuesByFile);
+      let aiComments = [];
 
       // Adiciona comentários da IA (se houver)
       if (aiAnalyses.length > 0) {
-        const aiComments = this.ai.formatAIComments(aiAnalyses);
-        comments = [...comments, ...aiComments];
+        aiComments = this.ai.formatAIComments(aiAnalyses);
         console.log(`🤖 +${aiComments.length} sugestão(ões) da IA adicionada(s)\n`);
       }
+
+      let comments = [...staticComments, ...aiComments];
 
       // Aprovação automática
       if (options.autoApprove && aiSummary) {
@@ -273,7 +275,9 @@ class CodeReviewBot {
       const reviewType = await this.cli.selectReviewType(hasErrors, suggestedReviewType);
 
       // Confirma criação do review
-      const confirmed = await this.cli.confirmReview(selectedComments.length, reviewType);
+      const selectedStatic = selectedComments.filter(c => !c.isAI).length;
+      const selectedAI = selectedComments.filter(c => c.isAI).length;
+      const confirmed = await this.cli.confirmReview(selectedComments.length, reviewType, selectedStatic, selectedAI);
 
       if (!confirmed) {
         console.log('❌ Operação cancelada pelo usuário.\n');

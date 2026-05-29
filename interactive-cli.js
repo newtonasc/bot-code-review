@@ -330,11 +330,13 @@ export default class InteractiveCLI {
 
   /**
    * Confirma ação de criar review
-   * @param {number} issuesCount - Número de issues a serem reportadas
+   * @param {number} issuesCount - Total de comentários a serem postados
    * @param {string} reviewType - Tipo de review (COMMENT, REQUEST_CHANGES, APPROVE)
+   * @param {number} staticCount - Comentários de análise estática
+   * @param {number} aiCount - Comentários gerados pela IA
    * @returns {Promise<boolean>} true se confirmado
    */
-  async confirmReview(issuesCount, reviewType) {
+  async confirmReview(issuesCount, reviewType, staticCount = 0, aiCount = 0) {
     this.initReadline();
 
     const typeLabels = {
@@ -348,7 +350,12 @@ export default class InteractiveCLI {
     console.log('='.repeat(80) + '\n');
 
     console.log(`Você está prestes a criar um review do tipo: ${typeLabels[reviewType]}`);
-    console.log(`Número de issues a serem reportadas: ${issuesCount}\n`);
+    console.log(`Comentários a serem postados: ${issuesCount}`);
+    if (staticCount > 0 || aiCount > 0) {
+      console.log(`  • Análise estática: ${staticCount}`);
+      console.log(`  • Sugestões da IA:  ${aiCount}`);
+    }
+    console.log();
 
     const answer = await this.question('Deseja continuar? (s/n): ');
 

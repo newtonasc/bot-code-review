@@ -630,6 +630,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
           file: filePath,
           line: suggestion.line || null,
           severity: suggestion.severity || 'info',
+          isAI: true,
           body,
         });
       }
@@ -640,6 +641,7 @@ Responda APENAS com o JSON, sem texto adicional.`;
           file: filePath,
           line: null,
           severity: 'error',
+          isAI: true,
           body: `🔒 **Problemas de Segurança Detectados**\n\n${analysis.security.issues.map(i => `- ${i}`).join('\n')}`,
         });
       }
