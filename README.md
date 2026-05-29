@@ -140,6 +140,11 @@ JIRA_PROJECT_KEY=PROJ
 # IA (Claude ou OpenAI)
 AI_PROVIDER=claude               # ou 'openai'
 AI_API_KEY=sk-ant-...           # ou sk-...
+
+# Automação de review (requer IA configurada)
+AUTO_APPROVE_ENABLED=false       # true = aprova automaticamente quando risco ≤ threshold
+AUTO_APPROVE_MAX_RISK=low        # low | medium | high
+AUTO_REQUEST_CHANGES_ENABLED=false  # true = solicita mudanças automaticamente quando IA recomendar
 ```
 
 ### 4. Teste
@@ -270,7 +275,7 @@ node index.js <pr-number> [options]
 ### Opções
 
 - `<pr-number>`: Número da Pull Request a ser analisada (obrigatório)
-- `--dry-run`: Apenas analisa e exibe relatório, sem criar review
+- `--dry-run`: Apenas analisa e exibe relatório, sem criar review (ignora automação)
 - `--help`, `-h`: Exibe ajuda
 
 ### Fluxo de Execução
@@ -278,18 +283,23 @@ node index.js <pr-number> [options]
 1. **Análise Automática**: O bot analisa todos os arquivos modificados na PR
 2. **Relatório**: Exibe um relatório completo com todas as issues encontradas
 3. **Conformidade**: Analisa se a PR está alinhada com a issue referenciada (se houver)
-4. **Seleção**: Permite escolher quais issues reportar:
+4. **Automação** *(se configurada via `.env`)*: O bot decide e age sem interação:
+   - `AUTO_APPROVE_ENABLED=true` → aprova se risco ≤ `AUTO_APPROVE_MAX_RISK`
+   - `AUTO_REQUEST_CHANGES_ENABLED=true` → solicita mudanças se a IA recomendar
+5. **Seleção** *(fluxo interativo, quando automação não atua)*: Permite escolher quais issues reportar:
    - `[a]` Todas
    - `[e]` Apenas erros
    - `[w]` Apenas avisos
    - `[c]` Seleção customizada
    - `[n]` Nenhuma (cancelar)
-5. **Tipo de Review**: Escolhe o tipo de review:
+6. **Tipo de Review**: Escolhe o tipo de review:
    - `REQUEST_CHANGES`: Solicita mudanças (recomendado para erros)
    - `COMMENT`: Apenas comenta
    - `APPROVE`: Aprova com comentários
-6. **Confirmação**: Confirma antes de criar o review
-7. **Criação**: Cria o review no GitHub
+7. **Confirmação**: Confirma antes de criar o review
+8. **Criação**: Cria o review no Bitbucket
+
+> `--dry-run` sempre tem prioridade sobre qualquer configuração de automação.
 
 ## 📚 Documentação Completa
 

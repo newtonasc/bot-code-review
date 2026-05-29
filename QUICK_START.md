@@ -94,7 +94,27 @@ Apenas veja o relatório sem criar review:
 node index.js 123 --dry-run
 ```
 
-## 5. Dicas Rápidas
+> `--dry-run` sempre tem prioridade: nenhuma ação é executada no PR, mesmo que a automação esteja habilitada.
+
+## 5. Automação de Review (Opcional)
+
+Com IA configurada, o bot pode aprovar ou solicitar mudanças automaticamente. Adicione ao `.env`:
+
+```bash
+# Aprova automaticamente PRs com risco "low" avaliado pela IA
+AUTO_APPROVE_ENABLED=true
+AUTO_APPROVE_MAX_RISK=low          # low | medium | high
+
+# Solicita mudanças automaticamente quando a IA recomendar REQUEST_CHANGES
+AUTO_REQUEST_CHANGES_ENABLED=true
+```
+
+**Comportamento:**
+- `AUTO_APPROVE_ENABLED`: Se o risco avaliado estiver dentro do limite, a PR é aprovada sem interação. Se exceder o limite, cai no fluxo interativo normal.
+- `AUTO_REQUEST_CHANGES_ENABLED`: Quando a IA recomenda `REQUEST_CHANGES`, posta todos os comentários e registra o request changes automaticamente.
+- Ambos ignorados se `--dry-run` for usado.
+
+## 6. Dicas Rápidas
 
 ✅ **DO:**
 - Use `--dry-run` primeiro para ver o que será reportado

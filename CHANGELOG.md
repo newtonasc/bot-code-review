@@ -1,5 +1,39 @@
 # Changelog - Code Review Bot
 
+## [1.8.3] - 2026-05-29
+
+### 🤖 Automação de Approve e Request Changes
+
+#### 🚀 Mudanças Principais
+
+Três novos parâmetros no `.env` permitem que o bot tome decisões de review automaticamente, sem interação manual:
+
+| Variável | Valores | Padrão | Descrição |
+|---|---|---|---|
+| `AUTO_APPROVE_ENABLED` | `true` / `false` | `false` | Habilita aprovação automática |
+| `AUTO_APPROVE_MAX_RISK` | `low` / `medium` / `high` | `low` | Risco máximo aceito para aprovar |
+| `AUTO_REQUEST_CHANGES_ENABLED` | `true` / `false` | `false` | Habilita request changes automático |
+
+**Auto-aprovação:** após análise da IA, o bot compara `risks.level` com `AUTO_APPROVE_MAX_RISK`. Se dentro do limite, aprova diretamente. Se exceder, avisa e segue o fluxo interativo.
+
+**Auto-request-changes:** quando a IA retorna `recommendation: "REQUEST_CHANGES"`, o bot posta todos os comentários e registra o request changes automaticamente.
+
+**`--dry-run` tem prioridade absoluta** — qualquer combinação com automação é ignorada quando `--dry-run` está ativo. O check ocorre antes da lógica de automação no código.
+
+#### 📝 Arquivos Modificados
+
+- `index.js`
+  - Função auxiliar `isRiskWithinThreshold(riskLevel, maxRisk)` com mapa `RISK_ORDER` (`low=0`, `medium=1`, `high=2`)
+  - Leitura de `AUTO_APPROVE_ENABLED`, `AUTO_APPROVE_MAX_RISK`, `AUTO_REQUEST_CHANGES_ENABLED` em `main()`
+  - Bloco de auto-aprovação e auto-request-changes em `run()`, após formatação de comentários e antes da seleção interativa
+  - Early return de `totalIssues === 0` movido para após os checks automáticos (só interrompe no fluxo interativo)
+- `.env.example` — documentação dos 3 novos parâmetros
+- `README.md` — seção de configuração e fluxo de execução atualizados
+- `QUICK_START.md` — nova seção "Automação de Review"
+- `AI_INTEGRATION.md` — nova seção "Automação de Review" com tabela de decisão e exemplos de saída
+
+---
+
 ## [1.8.2] - 2026-05-29
 
 ### 🤖 Sugestão de Código Corrigido nos Comentários do PR

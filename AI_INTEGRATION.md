@@ -203,6 +203,59 @@ AI_PROVIDER=claude node index.js 1912
 
 A IA pode detectar problemas sutis que regras estáticas não capturam.
 
+## 🤖 Automação de Review
+
+A IA pode decidir e agir automaticamente no PR, sem necessitar de interação manual. Configure no `.env`:
+
+```bash
+AUTO_APPROVE_ENABLED=true        # Habilita aprovação automática
+AUTO_APPROVE_MAX_RISK=low        # Nível máximo de risco aceito: low | medium | high
+AUTO_REQUEST_CHANGES_ENABLED=true  # Habilita request changes automático
+```
+
+### Lógica de decisão
+
+| Cenário | Ação |
+|---------|------|
+| `AUTO_APPROVE_ENABLED=true` e risco ≤ threshold | Aprova automaticamente (sem interação) |
+| `AUTO_APPROVE_ENABLED=true` e risco > threshold | Avisa e cai no fluxo interativo |
+| `AUTO_REQUEST_CHANGES_ENABLED=true` e IA recomenda `REQUEST_CHANGES` | Posta todos os comentários e registra request changes automaticamente |
+| `--dry-run` combinado com qualquer automação | `--dry-run` tem prioridade — nenhuma ação é executada |
+
+### Níveis de risco
+
+O campo `risks.level` é retornado pela IA no resumo da PR:
+
+- `low` — mudanças seguras, sem impacto em lógica crítica
+- `medium` — mudanças com algum risco, mas controlável
+- `high` — mudanças com alto risco ou impacto em áreas críticas
+
+### Exemplo de saída (auto-aprovação)
+
+```
+🤖 Auto-aprovação habilitada (risco máximo: "low")
+
+✅ PR encontrada: PROJ-123
+✅ Análise concluída
+
+🤖 Auto-aprovação: risco "low" dentro do limite configurado ("low")
+✅ Review criado: https://bitbucket.org/.../pull-requests/123
+```
+
+### Exemplo de saída (auto-request-changes)
+
+```
+🤖 Auto-request-changes habilitado
+
+✅ PR encontrada: PROJ-456
+✅ Análise concluída
+
+🤖 Auto-request-changes: IA recomenda mudanças (4 comentário(s))
+✅ Review criado: https://bitbucket.org/.../pull-requests/456
+```
+
+---
+
 ## 🔧 Configuração Avançada
 
 ### Customizar Modelo
