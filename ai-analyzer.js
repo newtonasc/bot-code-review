@@ -358,7 +358,7 @@ export default class AIAnalyzer {
 
 **Mudanças (diff):**
 \`\`\`diff
-${patch}
+${patch || content}
 \`\`\`
 
 **Issues detectadas por regras estáticas (${staticIssues.length}):**
@@ -379,8 +379,12 @@ ${staticIssues.map((issue, i) => `${i + 1}. [${issue.severity}] ${issue.rule}: $
 `;
     }
 
+    const diffScope = patch
+      ? '**IMPORTANTE:** Analise e comente SOMENTE as linhas que aparecem como adicionadas (+) ou alteradas no diff acima. Não sinalize problemas em código pré-existente que não foi modificado nesta PR.'
+      : '';
+
     prompt += `\n**Instruções:**
-1. Analise a qualidade do código (legibilidade, manutenibilidade, performance)
+${diffScope ? diffScope + '\n' : ''}1. Analise a qualidade do código (legibilidade, manutenibilidade, performance)
 2. Identifique problemas de segurança ou bugs potenciais
 3. Verifique conformidade com os padrões do projeto (documentação, constantes, enumeradores)
 4. Se houver contexto do Jira, valide alinhamento com requisitos

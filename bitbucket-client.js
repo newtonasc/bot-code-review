@@ -221,6 +221,10 @@ export default class BitbucketClient {
         return [];
       }
 
+      // Busca diff unificado para popular o patch de cada arquivo
+      console.log(`🔍 Buscando diff unificado da PR...`);
+      const patchMap = await this._fetchPatchMap(destHash, sourceHash, prNumber);
+
       // Busca conteúdo de cada arquivo
       console.log(`🔍 Buscando conteúdo dos arquivos...`);
       const filesWithContent = await Promise.all(
@@ -243,7 +247,7 @@ export default class BitbucketClient {
               deletions: file.lines_removed || 0,
               changes: (file.lines_added || 0) + (file.lines_removed || 0),
               sha: commitHash,
-              patch: null,
+              patch: patchMap[filePath] || null,
               content,
             };
           } catch (err) {
@@ -262,6 +266,54 @@ export default class BitbucketClient {
       console.error(`   Status: ${error.response?.status}`);
       throw new Error(`Erro ao buscar arquivos da PR #${prNumber}: ${error.message}`);
     }
+  }
+
+  /**
+   * Busca o diff unificado da PR e retorna um mapa filePath -> patch.
+   * Tenta primeiro a comparação de commits (três pontos) e cai para
+   * o endpoint /pullrequests/{id}/diff como fallback.
+   */
+  async _fetchPatchMap(destHash, sourceHash, prNumber) {
+    const tryFetch = async (url) => {
+      const response = await axios.get(url, this._getAxiosConfig({ responseType: 'text' }));
+      return response.data;
+    };
+
+    let diffText = null;
+    try {
+      diffText = await tryFetch(
+        `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/diff/${destHash}...${sourceHash}`
+      );
+    } catch {
+      try {
+        diffText = await tryFetch(
+          `${this.baseUrl}/repositories/${this.workspace}/${this.repoSlug}/pullrequests/${prNumber}/diff`
+        );
+      } catch (err) {
+        console.warn(`⚠️  Diff não disponível, análise usará arquivo completo: ${err.message}`);
+        return {};
+      }
+    }
+
+    return this._parseDiffByFile(diffText);
+  }
+
+  /**
+   * Divide o texto de um diff unificado em um mapa filePath -> patchString.
+   */
+  _parseDiffByFile(diffText) {
+    const patchMap = {};
+    if (!diffText) return patchMap;
+
+    const blocks = diffText.split(/^diff --git /m).filter(Boolean);
+    for (const block of blocks) {
+      // "+++ b/path/to/file.js" contém o caminho do arquivo novo
+      const match = block.match(/^\+{3} b\/(.+)$/m);
+      if (match) {
+        patchMap[match[1]] = block;
+      }
+    }
+    return patchMap;
   }
 
   /**

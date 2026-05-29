@@ -50,13 +50,19 @@ export default class CodeAnalyzer {
   }
 
   /**
-   * Aplica uma regra específica ao arquivo
+   * Aplica uma regra específica ao arquivo.
+   * Quando patch está disponível, a análise é restrita às linhas alteradas
+   * para não sinalizar problemas pré-existentes.
    */
   applyRule(rule, filePath, content, patch) {
+    const changedLines = this._parseChangedLineNumbers(patch);
+
     if (rule.pattern) {
-      if (!content) return;
-      // Regra baseada em regex
-      const matches = content.match(new RegExp(rule.pattern, 'g'));
+      // Regex: analisa apenas as linhas adicionadas do diff (ou arquivo completo sem patch)
+      const analyzeContent = patch ? this._extractAddedContent(patch) : content;
+      if (!analyzeContent) return;
+
+      const matches = analyzeContent.match(new RegExp(rule.pattern, 'g'));
       if (matches) {
         matches.forEach((match) => {
           const result = rule.check ? rule.check(match, filePath, this.enumMatcher) : {
@@ -69,28 +75,54 @@ export default class CodeAnalyzer {
       }
     } else if (rule.check) {
       if (!content) return;
-      // Regra baseada em função de verificação
+      // Função: roda no arquivo completo mas filtra pelo número de linha alterada
       const result = rule.check(content, filePath, this.enumMatcher);
 
       if (result) {
         if (Array.isArray(result)) {
-          // Múltiplas issues
-          result.forEach((issue) => {
-            this.addIssue(
-              filePath,
-              rule.id,
-              rule.severity,
-              issue,
-              null,
-              issue.line
-            );
-          });
+          result
+            .filter(issue => !changedLines || issue.line == null || changedLines.has(issue.line))
+            .forEach((issue) => {
+              this.addIssue(filePath, rule.id, rule.severity, issue, null, issue.line);
+            });
         } else {
-          // Issue única
-          this.addIssue(filePath, rule.id, rule.severity, result);
+          if (!changedLines || result.line == null || changedLines.has(result.line)) {
+            this.addIssue(filePath, rule.id, rule.severity, result);
+          }
         }
       }
     }
+  }
+
+  /**
+   * Retorna um Set com os números de linha (lado novo) alterados no patch.
+   * Retorna null quando não há patch disponível (sem filtragem).
+   */
+  _parseChangedLineNumbers(patch) {
+    if (!patch) return null;
+    const changedLines = new Set();
+    let currentLine = 0;
+    for (const line of patch.split('\n')) {
+      const hunk = line.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (hunk) {
+        currentLine = parseInt(hunk[1], 10) - 1;
+      } else if (line.startsWith('+') && !line.startsWith('+++')) {
+        changedLines.add(++currentLine);
+      } else if (!line.startsWith('-')) {
+        currentLine++;
+      }
+    }
+    return changedLines;
+  }
+
+  /**
+   * Extrai somente as linhas adicionadas (+) do patch para análise por regex.
+   */
+  _extractAddedContent(patch) {
+    return patch.split('\n')
+      .filter(line => line.startsWith('+') && !line.startsWith('+++'))
+      .map(line => line.substring(1))
+      .join('\n');
   }
 
   /**
