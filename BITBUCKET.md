@@ -77,15 +77,13 @@ npm run code-review 123 -- --dry-run
 
 ### Ações de Review
 
-| GitHub | Bitbucket | Comportamento |
-|--------|-----------|---------------|
-| REQUEST_CHANGES | Comentário + Remove aprovação | Solicita mudanças via comentário |
-| APPROVE | Approve PR | Aprova a Pull Request |
-| COMMENT | Comentário | Apenas adiciona comentário |
+| Tipo | Endpoint Bitbucket | Comportamento |
+|------|--------------------|---------------|
+| REQUEST_CHANGES | `POST /request-changes` | Aciona o "Request Changes" nativo (equivalente ao Shift+R na UI). Bloqueia o merge até as mudanças serem endereçadas. Fallback para remoção de aprovação se o token não tiver permissão. |
+| APPROVE | `POST /approve` | Aprova a Pull Request |
+| COMMENT | `POST /comments` | Apenas adiciona comentário, sem alterar o status da PR |
 
-**Nota:** Bitbucket não tem conceito formal de "Request Changes" como o GitHub. O bot:
-1. Adiciona comentário detalhando as mudanças necessárias
-2. Remove aprovação existente (se houver)
+**Nota:** O Bitbucket possui endpoint nativo de "Request Changes" (`POST /pullrequests/{id}/request-changes`), o mesmo acionado pelo botão na interface web (Shift+R). O bot o utiliza diretamente, alterando o estado do participante para `changes_requested` e bloqueando o merge.
 
 ### Comentários Inline
 
@@ -310,7 +308,7 @@ export BITBUCKET_REPO_SLUG=nome-correto-do-repo
 | Recurso | GitHub | Bitbucket |
 |---------|--------|-----------|
 | **Autenticação** | Token | Username + App Password |
-| **Reviews** | Request Changes, Approve, Comment | Approve, Comment |
+| **Reviews** | Request Changes, Approve, Comment | Request Changes, Approve, Comment |
 | **Issues** | Nativo | Jira |
 | **API** | Octokit | Axios + REST |
 | **Comentários Inline** | ✅ | ✅ |

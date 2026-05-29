@@ -219,7 +219,7 @@ AUTO_REQUEST_CHANGES_ENABLED=true  # Habilita request changes automático
 |---------|------|
 | `AUTO_APPROVE_ENABLED=true` e risco ≤ threshold | Aprova automaticamente (sem interação) |
 | `AUTO_APPROVE_ENABLED=true` e risco > threshold | Avisa e cai no fluxo interativo |
-| `AUTO_REQUEST_CHANGES_ENABLED=true` e IA recomenda `REQUEST_CHANGES` | Posta todos os comentários e registra request changes automaticamente |
+| `AUTO_REQUEST_CHANGES_ENABLED=true` e IA recomenda `REQUEST_CHANGES` | Posta todos os comentários e aciona o "Request Changes" nativo do Bitbucket (Shift+R), bloqueando o merge |
 | `--dry-run` combinado com qualquer automação | `--dry-run` tem prioridade — nenhuma ação é executada |
 
 ### Níveis de risco

@@ -111,7 +111,7 @@ AUTO_REQUEST_CHANGES_ENABLED=true
 
 **Comportamento:**
 - `AUTO_APPROVE_ENABLED`: Se o risco avaliado estiver dentro do limite, a PR é aprovada sem interação. Se exceder o limite, cai no fluxo interativo normal.
-- `AUTO_REQUEST_CHANGES_ENABLED`: Quando a IA recomenda `REQUEST_CHANGES`, posta todos os comentários e registra o request changes automaticamente.
+- `AUTO_REQUEST_CHANGES_ENABLED`: Quando a IA recomenda `REQUEST_CHANGES`, posta todos os comentários e aciona o "Request Changes" nativo do Bitbucket (equivalente ao Shift+R), bloqueando o merge da PR.
 - Ambos ignorados se `--dry-run` for usado.
 
 ## 6. Dicas Rápidas
