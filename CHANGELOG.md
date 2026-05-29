@@ -1,5 +1,33 @@
 # Changelog - Code Review Bot
 
+## [1.10.1] - 2026-05-29
+
+### 🔍 Transparência na Confirmação do Review
+
+Correções na tela de confirmação para eliminar a confusão entre o número de issues exibido no relatório e o total de comentários a serem postados.
+
+#### Problema resolvido
+
+O relatório mostrava 7 issues (análise estática), mas a tela de confirmação exibia 28 — sem explicar de onde vinham os demais. Os comentários gerados pela IA eram formatados e adicionados silenciosamente, sem nunca serem exibidos ao usuário antes da confirmação.
+
+#### Melhorias
+
+- **Breakdown na confirmação**: a tela de confirmação agora detalha a origem dos comentários:
+  ```
+  Comentários a serem postados: 28
+    • Análise estática: 7
+    • Sugestões da IA:  21
+  ```
+- **Seção "SUGESTÕES DA IA POR ARQUIVO"**: exibida antes da confirmação, com as sugestões inline agrupadas por arquivo, severidade (`🚨/⚠️/💡`) e número de linha — no mesmo estilo do relatório de issues estáticas. Aparece tanto no fluxo interativo quanto em `--dry-run`.
+
+#### Arquivos Modificados
+
+- `interactive-cli.js`: adiciona `displayAISuggestions`; `confirmReview` aceita `staticCount`/`aiCount` e exibe o breakdown
+- `index.js`: move formatação de comentários da IA para antes do `--dry-run`; passa contagens individuais para `confirmReview`
+- `ai-analyzer.js`: marca comentários gerados pela IA com `isAI: true` para permitir a contagem separada
+
+---
+
 ## [1.10.0] - 2026-05-29
 
 ### 🎯 Análise Restrita às Linhas Alteradas da PR
