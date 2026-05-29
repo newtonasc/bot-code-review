@@ -1,5 +1,50 @@
 # Changelog - Code Review Bot
 
+## [1.10.0] - 2026-05-29
+
+### 🎯 Análise Restrita às Linhas Alteradas da PR
+
+O bot agora analisa **somente o código efetivamente modificado** na PR, ignorando problemas pré-existentes em linhas não alteradas.
+
+#### Problema resolvido
+
+Antes, tanto a análise estática quanto a IA examinavam o arquivo inteiro, sinalizando padrões e formatações que já existiam antes da PR — gerando ruído e dificultando o foco no que realmente mudou.
+
+#### Como funciona agora
+
+- **Patch por arquivo**: o bot busca o diff unificado da PR para cada arquivo
+  - Tenta os endpoints `/diff` da API do Bitbucket
+  - Se indisponível (404), **gera o patch localmente** comparando o conteúdo do arquivo no commit de destino (base) com a versão da PR usando a lib `diff`
+- **Análise estática (regras regex)**: roda apenas nas linhas adicionadas (`+`) extraídas do patch
+- **Análise estática (regras por função)**: roda no arquivo completo mas filtra os resultados pelo número de linha alterada
+- **Análise com IA**: o prompt instrui explicitamente a comentar somente nas linhas `+` do diff
+
+#### Correção: diffstat retornava arquivos em excesso
+
+O endpoint `diffstat/{destHash}..{sourceHash}` (dois pontos) fazia um diff direto entre os dois commits, incluindo todos os arquivos que mudaram na branch de destino desde a criação da PR. A correção usa três pontos (`...`), que calcula pelo merge base e retorna apenas os arquivos alterados na PR.
+
+#### Arquivos Modificados
+
+- `bitbucket-client.js`:
+  - Corrige `diffstat/{destHash}..{sourceHash}` → `{destHash}...{sourceHash}`
+  - Adiciona `_fetchPatchMap`: busca diff unificado via API
+  - Adiciona `_generateFilePatch`: gera patch localmente via `createPatch` (lib `diff`) como fallback
+  - Adiciona `_parseDiffByFile`: divide unified diff em mapa `filePath → patch`
+  - Mensagem de fallback simplificada (sem referência ao erro 404)
+- `code-analyzer.js`:
+  - Adiciona `_parseChangedLineNumbers`: extrai números de linha alteradas do patch
+  - Adiciona `_extractAddedContent`: extrai linhas `+` do patch para análise regex
+  - `applyRule` agora escopa a análise às linhas alteradas quando patch está disponível
+- `ai-analyzer.js`:
+  - Prompt inclui instrução explícita para comentar apenas nas linhas alteradas
+  - Fallback para `content` quando patch não está disponível (evita exibir `null`)
+
+#### Dependência adicionada
+
+- `diff` ^9.0.0 — geração de unified diff para comparação local de arquivos
+
+---
+
 ## [1.9.0] - 2026-05-29
 
 ### 🎯 Detecção Inteligente de Enums e Constantes
